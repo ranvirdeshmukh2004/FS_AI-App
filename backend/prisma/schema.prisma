@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ChatSession {
+  id        String    @id @default(uuid())
+  title     String    @default("New Chat")
+  provider  String
+  model     String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  messages  Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  sessionId String      @map("session_id")
+  role      MessageRole
+  content   String
+  tokens    Int?
+  createdAt DateTime    @default(now()) @map("created_at")
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("messages")
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  provider  String   @unique
+  key       String
+  label     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("api_keys")
+}
+
+model ProviderModel {
+  id       String @id @default(uuid())
+  provider String
+  modelId  String @map("model_id")
+  name     String
+  active   Boolean @default(true)
+
+  @@unique([provider, modelId])
+  @@map("provider_models")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
