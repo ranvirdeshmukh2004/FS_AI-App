@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import * as apiKeyService from "../services/apiKeyService.js";
+import { getProviderConfig } from "../config/providers.js";
+import { logger } from "../utils/logger.js";
 
 const router = Router();
 
@@ -8,6 +10,11 @@ const upsertSchema = z.object({
   provider: z.string().min(1),
   key: z.string().min(1),
   label: z.string().optional(),
+});
+
+const testSchema = z.object({
+  provider: z.string().min(1),
+  key: z.string().min(1),
 });
 
 router.get("/", async (_req, res) => {
@@ -23,6 +30,52 @@ router.post("/", async (req, res) => {
   }
   await apiKeyService.upsertApiKey(parsed.data.provider, parsed.data.key, parsed.data.label);
   res.status(200).json({ message: "API key saved" });
+});
+
+router.post("/test", async (req, res) => {
+  const parsed = testSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ valid: false, error: "Missing provider or key" });
+    return;
+  }
+
+  const { provider, key } = parsed.data;
+  const providerConfig = getProviderConfig(provider);
+
+  if (!providerConfig) {
+    res.status(400).json({ valid: false, error: `Unknown provider: ${provider}` });
+    return;
+  }
+
+  try {
+    const url = `${providerConfig.baseUrl}/models`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.ok) {
+      res.json({ valid: true, message: `Connected to ${providerConfig.name} successfully` });
+    } else {
+      const body = await response.text();
+      logger.warn({ provider, status: response.status, body }, "API key test failed");
+      let errorMsg = `${providerConfig.name} returned ${response.status}`;
+      if (response.status === 401) errorMsg = "Invalid API key — authentication failed";
+      if (response.status === 403) errorMsg = "API key does not have permission";
+      if (response.status === 429) errorMsg = "Rate limited — but key is valid";
+      res.json({
+        valid: response.status === 429,
+        message: errorMsg,
+      });
+    }
+  } catch (err) {
+    logger.error({ err, provider }, "API key test error");
+    const message = err instanceof Error ? err.message : "Connection failed";
+    res.json({ valid: false, message: `Could not reach ${providerConfig.name}: ${message}` });
+  }
 });
 
 router.delete("/:provider", async (req, res) => {

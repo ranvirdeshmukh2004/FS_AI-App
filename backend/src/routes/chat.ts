@@ -20,13 +20,27 @@ router.post("/", async (req, res) => {
 
   const { sessionId, message } = parsed.data;
 
-  const session = await sessionService.getSession(sessionId);
+  let session;
+  try {
+    session = await sessionService.getSession(sessionId);
+  } catch (err) {
+    logger.error({ err }, "Database error fetching session");
+    res.status(500).json({ error: "Database error. Check database connection." });
+    return;
+  }
+
   if (!session) {
     res.status(404).json({ error: "Session not found" });
     return;
   }
 
-  await sessionService.addMessage(sessionId, "user", message);
+  try {
+    await sessionService.addMessage(sessionId, "user", message);
+  } catch (err) {
+    logger.error({ err }, "Database error saving user message");
+    res.status(500).json({ error: "Failed to save message to database." });
+    return;
+  }
 
   const messages = [
     ...session.messages.map((m) => ({ role: m.role, content: m.content })),
@@ -46,7 +60,11 @@ router.post("/", async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
     },
     async (fullText) => {
-      await sessionService.addMessage(sessionId, "assistant", fullText);
+      try {
+        await sessionService.addMessage(sessionId, "assistant", fullText);
+      } catch (err) {
+        logger.error({ err }, "Database error saving assistant message");
+      }
       res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
       res.end();
     },

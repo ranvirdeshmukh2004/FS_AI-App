@@ -2,7 +2,17 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { api } from "@/services/api";
 import type { ApiKeyInfo } from "@/types";
-import { Key, Trash2, Save, Eye, EyeOff } from "lucide-react";
+import {
+  Key,
+  Trash2,
+  Save,
+  Eye,
+  EyeOff,
+  FlaskConical,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 
 export function SettingsView() {
   const { providers } = useAppStore();
@@ -11,6 +21,12 @@ export function SettingsView() {
   const [formKey, setFormKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    valid: boolean;
+    message: string;
+  } | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     loadKeys();
@@ -22,17 +38,51 @@ export function SettingsView() {
     }
   }, [providers, formProvider]);
 
+  // Clear test result when provider or key changes
+  useEffect(() => {
+    setTestResult(null);
+    setSaveSuccess(false);
+  }, [formProvider, formKey]);
+
   const loadKeys = async () => {
-    const data = await api.getApiKeys();
-    setKeys(data);
+    try {
+      const data = await api.getApiKeys();
+      setKeys(data);
+    } catch (err) {
+      console.error("Failed to load keys:", err);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!formProvider || !formKey.trim()) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await api.testApiKey(formProvider, formKey.trim());
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        valid: false,
+        message: err instanceof Error ? err.message : "Test failed",
+      });
+    }
+    setTesting(false);
   };
 
   const handleSave = async () => {
     if (!formProvider || !formKey.trim()) return;
     setSaving(true);
-    await api.saveApiKey(formProvider, formKey.trim());
-    setFormKey("");
-    await loadKeys();
+    setSaveSuccess(false);
+    try {
+      await api.saveApiKey(formProvider, formKey.trim());
+      setFormKey("");
+      setSaveSuccess(true);
+      setTestResult(null);
+      await loadKeys();
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to save key:", err);
+    }
     setSaving(false);
   };
 
@@ -84,22 +134,71 @@ export function SettingsView() {
                 </button>
               </div>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={!formKey.trim() || saving}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Save size={16} />
-              {saving ? "Saving..." : "Save Key"}
-            </button>
+
+            {testResult && (
+              <div
+                className={`p-3 rounded-lg flex items-center gap-2 text-sm ${
+                  testResult.valid
+                    ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+                    : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+                }`}
+              >
+                {testResult.valid ? (
+                  <CheckCircle2 size={16} className="flex-shrink-0" />
+                ) : (
+                  <XCircle size={16} className="flex-shrink-0" />
+                )}
+                {testResult.message}
+              </div>
+            )}
+
+            {saveSuccess && (
+              <div className="p-3 rounded-lg flex items-center gap-2 text-sm bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
+                <CheckCircle2 size={16} className="flex-shrink-0" />
+                API key saved successfully!
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleTest}
+                disabled={!formKey.trim() || testing}
+                className="btn-secondary flex items-center gap-2"
+              >
+                {testing ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <FlaskConical size={16} />
+                )}
+                {testing ? "Testing..." : "Test Key"}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!formKey.trim() || saving}
+                className="btn-primary flex items-center gap-2"
+              >
+                {saving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+                {saving ? "Saving..." : "Save Key"}
+              </button>
+            </div>
           </div>
         </div>
 
         <h3 className="font-semibold mb-4">Configured Keys</h3>
         {keys.length === 0 ? (
-          <p className="text-gray-400 text-sm">
-            No API keys configured yet. Add one above to get started.
-          </p>
+          <div className="text-center py-8 text-gray-400">
+            <Key size={32} className="mx-auto mb-3 opacity-50" />
+            <p className="text-sm">
+              No API keys configured yet. Add one above to get started.
+            </p>
+            <p className="text-xs mt-1">
+              Tip: Use the "Test Key" button to verify your key works before saving.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {keys.map((k) => (

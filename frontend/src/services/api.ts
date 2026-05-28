@@ -50,6 +50,12 @@ export const api = {
   deleteApiKey: (provider: string) =>
     request<void>(`/api/keys/${provider}`, { method: "DELETE" }),
 
+  testApiKey: (provider: string, key: string) =>
+    request<{ valid: boolean; message: string }>("/api/keys/test", {
+      method: "POST",
+      body: JSON.stringify({ provider, key }),
+    }),
+
   streamChat: async function* (sessionId: string, message: string) {
     const res = await fetch(`${BASE}/api/chat`, {
       method: "POST",
