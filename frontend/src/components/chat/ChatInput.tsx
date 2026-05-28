@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
-import { Send } from "lucide-react";
+import { Send, Loader2 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 
 export function ChatInput() {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { sendMessage, isStreaming } = useAppStore();
+  const sendMessage = useAppStore((s) => s.sendMessage);
+  const isStreaming = useAppStore((s) => s.isStreaming);
 
   const handleSubmit = () => {
     const trimmed = input.trim();
@@ -39,7 +40,7 @@ export function ChatInput() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onInput={handleInput}
-          placeholder="Type a message..."
+          placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
           rows={1}
           className="input-field resize-none min-h-[42px] max-h-[200px]"
           disabled={isStreaming}
@@ -49,7 +50,11 @@ export function ChatInput() {
           disabled={!input.trim() || isStreaming}
           className="btn-primary p-2.5 flex-shrink-0"
         >
-          <Send size={18} />
+          {isStreaming ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Send size={18} />
+          )}
         </button>
       </div>
     </div>

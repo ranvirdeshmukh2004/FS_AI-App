@@ -21,17 +21,17 @@ interface AppState {
   setSidebarOpen: (open: boolean) => void;
   clearError: () => void;
 
-  loadSessions: () => Promise<void>;
-  loadSession: (id: string) => Promise<void>;
+  loadSessions: () => void;
+  loadSession: (id: string) => void;
   createSession: () => Promise<string | null>;
-  deleteSession: (id: string) => Promise<void>;
-  updateSessionTitle: (id: string, title: string) => Promise<void>;
+  deleteSession: (id: string) => void;
+  updateSessionTitle: (id: string, title: string) => void;
 
-  loadProviders: () => Promise<void>;
+  loadProviders: () => void;
   setProvider: (provider: string) => void;
   setModel: (model: string) => void;
 
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -59,78 +59,64 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   clearError: () => set({ error: null }),
 
-  loadSessions: async () => {
-    try {
-      const sessions = await api.getSessions();
-      set({ sessions });
-    } catch (err) {
-      console.error("Failed to load sessions:", err);
-      set({ error: "Failed to load sessions. Is the backend running?" });
-    }
+  loadSessions: () => {
+    api.getSessions()
+      .then((sessions) => set({ sessions }))
+      .catch(() => set({ sessions: [] }));
   },
 
-  loadSession: async (id) => {
-    try {
-      const session = await api.getSession(id);
-      if (session) {
-        set({
-          activeSessionId: id,
-          messages: session.messages || [],
-          selectedProvider: session.provider,
-          selectedModel: session.model,
-          view: "chat",
-          error: null,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to load session:", err);
-      set({ error: "Failed to load session" });
-    }
+  loadSession: (id) => {
+    api.getSession(id)
+      .then((session) => {
+        if (session) {
+          set({
+            activeSessionId: id,
+            messages: session.messages || [],
+            selectedProvider: session.provider,
+            selectedModel: session.model,
+            view: "chat",
+            error: null,
+          });
+        }
+      })
+      .catch(() => set({ error: "Failed to load session" }));
   },
 
-  createSession: async () => {
-    try {
-      const { selectedProvider, selectedModel } = get();
-      const session = await api.createSession(selectedProvider, selectedModel);
-      await get().loadSessions();
-      set({ activeSessionId: session.id, messages: [], error: null });
-      return session.id;
-    } catch (err) {
-      console.error("Failed to create session:", err);
-      set({ error: "Failed to create chat session. Check database connection." });
-      return null;
-    }
+  createSession: () => {
+    const { selectedProvider, selectedModel } = get();
+    return api.createSession(selectedProvider, selectedModel)
+      .then((session) => {
+        get().loadSessions();
+        set({ activeSessionId: session.id, messages: [], error: null });
+        return session.id;
+      })
+      .catch((err) => {
+        set({ error: "Failed to create session: " + (err instanceof Error ? err.message : "Unknown error") });
+        return null;
+      });
   },
 
-  deleteSession: async (id) => {
-    try {
-      await api.deleteSession(id);
-      const { activeSessionId } = get();
-      if (activeSessionId === id) {
-        set({ activeSessionId: null, messages: [] });
-      }
-      await get().loadSessions();
-    } catch (err) {
-      console.error("Failed to delete session:", err);
-    }
+  deleteSession: (id) => {
+    api.deleteSession(id)
+      .then(() => {
+        if (get().activeSessionId === id) {
+          set({ activeSessionId: null, messages: [] });
+        }
+        get().loadSessions();
+      })
+      .catch(() => {});
   },
 
-  updateSessionTitle: async (id, title) => {
-    try {
-      await api.updateSessionTitle(id, title);
-      await get().loadSessions();
-    } catch {
-      // non-critical
-    }
+  updateSessionTitle: (id, title) => {
+    api.updateSessionTitle(id, title)
+      .then(() => get().loadSessions())
+      .catch(() => {});
   },
 
-  loadProviders: async () => {
-    try {
-      const providers = await api.getProviders();
-      set({ providers });
-    } catch (err) {
-      console.error("Failed to load providers:", err);
-    }
+  loadProviders: () => {
+    api.getProviders()
+      .then((providers) => set({ providers }))
+      .catch(() => {});
   },
 
   setProvider: (provider) => {
@@ -143,102 +129,85 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setModel: (model) => set({ selectedModel: model }),
 
-  sendMessage: async (content) => {
-    let { activeSessionId } = get();
+  sendMessage: (content) => {
+    const state = get();
+
+    if (state.isStreaming) return;
+
     set({ error: null });
 
-    if (!activeSessionId) {
-      activeSessionId = await get().createSession();
-      if (!activeSessionId) return;
-    }
+    const doChat = (sessionId: string) => {
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        sessionId,
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+      };
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      sessionId: activeSessionId,
-      role: "user",
-      content,
-      createdAt: new Date().toISOString(),
-    };
+      set((s) => ({
+        messages: [...s.messages, userMessage],
+        isStreaming: true,
+        streamingContent: "",
+      }));
 
-    set((s) => ({
-      messages: [...s.messages, userMessage],
-      isStreaming: true,
-      streamingContent: "",
-    }));
-
-    try {
       let fullContent = "";
-      let gotResponse = false;
 
-      for await (const event of api.streamChat(activeSessionId, content)) {
-        if (event.type === "chunk") {
-          gotResponse = true;
-          fullContent += event.content;
+      api.streamChat(
+        sessionId,
+        content,
+        (chunk) => {
+          fullContent += chunk;
           set({ streamingContent: fullContent });
-        } else if (event.type === "done") {
-          gotResponse = true;
-          const assistantMessage: Message = {
-            id: crypto.randomUUID(),
-            sessionId: activeSessionId!,
-            role: "assistant",
-            content: event.content || fullContent,
-            createdAt: new Date().toISOString(),
-          };
-          set((s) => ({
-            messages: [...s.messages, assistantMessage],
-            isStreaming: false,
-            streamingContent: "",
-          }));
-        } else if (event.type === "error") {
+        },
+        (doneText) => {
+          const finalContent = doneText || fullContent;
+          if (finalContent) {
+            const assistantMessage: Message = {
+              id: crypto.randomUUID(),
+              sessionId,
+              role: "assistant",
+              content: finalContent,
+              createdAt: new Date().toISOString(),
+            };
+            set((s) => ({
+              messages: [...s.messages, assistantMessage],
+              isStreaming: false,
+              streamingContent: "",
+            }));
+          } else {
+            set({
+              isStreaming: false,
+              streamingContent: "",
+              error: "No response received from AI. Check your API key and credits.",
+            });
+          }
+
+          // Auto-title
+          const msgs = get().messages;
+          if (msgs.length === 2) {
+            const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+            get().updateSessionTitle(sessionId, title);
+          }
+        },
+        (errorMsg) => {
           set({
             isStreaming: false,
             streamingContent: "",
-            error: `AI Error: ${event.content}`,
+            error: errorMsg,
           });
-          return;
         }
-      }
+      );
+    };
 
-      // If stream ended without a done event but we got chunks
-      if (!gotResponse) {
-        set({
-          isStreaming: false,
-          streamingContent: "",
-          error: "No response from AI provider. Check your API key and try again.",
-        });
-      } else if (fullContent && get().isStreaming) {
-        // Stream ended without explicit done event
-        const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          sessionId: activeSessionId!,
-          role: "assistant",
-          content: fullContent,
-          createdAt: new Date().toISOString(),
-        };
-        set((s) => ({
-          messages: [...s.messages, assistantMessage],
-          isStreaming: false,
-          streamingContent: "",
-        }));
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      console.error("Chat error:", err);
-      set({
-        isStreaming: false,
-        streamingContent: "",
-        error: `Chat failed: ${message}`,
+    if (state.activeSessionId) {
+      doChat(state.activeSessionId);
+    } else {
+      get().createSession().then((sessionId) => {
+        if (sessionId) {
+          doChat(sessionId);
+        }
       });
-    }
-
-    // Auto-title after first exchange
-    try {
-      if (get().messages.length === 2 && activeSessionId) {
-        const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
-        await get().updateSessionTitle(activeSessionId, title);
-      }
-    } catch {
-      // non-critical
     }
   },
 }));
