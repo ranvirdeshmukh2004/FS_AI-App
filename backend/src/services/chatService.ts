@@ -40,6 +40,7 @@ export async function streamChat(
         model,
         messages,
         stream: true,
+        max_tokens: 1024,
       }),
     });
 
