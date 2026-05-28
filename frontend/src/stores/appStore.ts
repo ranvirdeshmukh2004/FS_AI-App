@@ -2,6 +2,10 @@ import { create } from "zustand";
 import type { ChatSession, Message, Provider, Theme, View } from "@/types";
 import { api } from "@/services/api";
 
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 interface AppState {
   theme: Theme;
   view: View;
@@ -138,7 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const doChat = (sessionId: string) => {
       const userMessage: Message = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         sessionId,
         role: "user",
         content,
@@ -164,7 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           const finalContent = doneText || fullContent;
           if (finalContent) {
             const assistantMessage: Message = {
-              id: crypto.randomUUID(),
+              id: generateId(),
               sessionId,
               role: "assistant",
               content: finalContent,
