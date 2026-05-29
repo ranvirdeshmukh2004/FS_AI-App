@@ -79,13 +79,11 @@ router.post("/", async (req, res) => {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       },
       async (fullText) => {
-        const dbStartSave = Date.now();
         try {
           await sessionService.addMessage(sessionId, "assistant", fullText);
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
-        const dbTimeSave = Date.now() - dbStartSave;
         res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
         res.end();
       },
