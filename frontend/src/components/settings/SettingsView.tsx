@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { api } from "@/services/api";
-import type { ApiKeyInfo, SearchEngine } from "@/types";
+import type { ApiKeyInfo } from "@/types";
 import {
   Key,
   Trash2,

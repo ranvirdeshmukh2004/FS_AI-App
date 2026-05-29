@@ -4,7 +4,7 @@ import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
 import { ChatInput } from "./ChatInput";
 import { ModelSelector } from "../common/ModelSelector";
-import { MessageSquarePlus, X, AlertTriangle, Globe, Search } from "lucide-react";
+import { MessageSquarePlus, X, AlertTriangle, Search } from "lucide-react";
 
 export function ChatView() {
   const { messages, isStreaming, streamingContent, activeSessionId, error, clearError, toolActivity } =
