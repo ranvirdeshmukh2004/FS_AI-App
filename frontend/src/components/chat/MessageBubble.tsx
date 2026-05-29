@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { Message, TraceStep } from "@/types";
-import { User, Bot, Clock, Wrench, ChevronDown, ChevronRight, Brain, Search, BookOpen } from "lucide-react";
+import { User, Bot, Clock, Wrench, ChevronDown, ChevronRight, Brain, Search, BookOpen, Zap, Database } from "lucide-react";
 
 interface Props {
   message: Message;
@@ -19,7 +19,6 @@ function getStepIcon(type: string) {
 }
 
 function TraceStepItem({ step, index }: { step: TraceStep; index: number }) {
-
   const labelMap: Record<string, string> = {
     thought: "Thought",
     action: "Action",
@@ -121,8 +120,8 @@ export function MessageBubble({ message }: Props) {
         {/* Trace footer — only for assistant messages */}
         {!isUser && trace && (
           <div className="mt-1.5 ml-1">
-            {/* Stats bar */}
-            <div className="flex items-center gap-3 text-xs text-gray-400">
+            {/* Stats row 1: timing + tools */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
               <span className="flex items-center gap-1">
                 <Clock size={12} />
                 {trace.total_time}s
@@ -130,7 +129,19 @@ export function MessageBubble({ message }: Props) {
               {trace.tool_calls > 0 && (
                 <span className="flex items-center gap-1">
                   <Wrench size={12} />
-                  {trace.tool_calls} tool call{trace.tool_calls !== 1 ? "s" : ""}
+                  {trace.tool_calls} tool{trace.tool_calls !== 1 ? "s" : ""}
+                </span>
+              )}
+              {trace.total_tokens > 0 && (
+                <span className="flex items-center gap-1">
+                  <Zap size={12} />
+                  {trace.input_tokens} in / {trace.output_tokens} out / {trace.total_tokens} total
+                </span>
+              )}
+              {trace.db_time !== undefined && trace.db_time > 0 && (
+                <span className="flex items-center gap-1">
+                  <Database size={12} />
+                  DB {trace.db_time}ms
                 </span>
               )}
               {trace.steps.length > 0 && !(trace.steps.length === 1 && trace.steps[0].type === "direct") && (

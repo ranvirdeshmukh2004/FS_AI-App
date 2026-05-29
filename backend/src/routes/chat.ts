@@ -25,6 +25,7 @@ router.post("/", async (req, res) => {
 
   const { sessionId, message, useTools, searchEngine, googleApiKey, googleCx } = parsed.data;
 
+  const dbStartFetch = Date.now();
   let session;
   try {
     session = await sessionService.getSession(sessionId);
@@ -46,6 +47,7 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: "Failed to save message to database." });
     return;
   }
+  const dbTimeFetch = Date.now() - dbStartFetch;
 
   const messages = [
     ...session.messages.map((m) => ({ role: m.role, content: m.content })),
@@ -58,7 +60,6 @@ router.post("/", async (req, res) => {
   res.flushHeaders();
 
   if (useTools) {
-    // Use ReAct agent with tool access
     streamReactChat(
       session.provider,
       session.model,
@@ -67,15 +68,24 @@ router.post("/", async (req, res) => {
       googleApiKey,
       googleCx,
       (event) => {
-        // Forward all event types (thinking, tool, observation, chunk, trace) to client
+        // Inject db_time into trace events
+        if (event.type === "trace") {
+          try {
+            const traceData = JSON.parse(event.content);
+            traceData.db_time = dbTimeFetch;
+            event = { type: "trace", content: JSON.stringify(traceData) };
+          } catch { /* pass through */ }
+        }
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       },
       async (fullText) => {
+        const dbStartSave = Date.now();
         try {
           await sessionService.addMessage(sessionId, "assistant", fullText);
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
+        const dbTimeSave = Date.now() - dbStartSave;
         res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
         res.end();
       },
@@ -86,7 +96,6 @@ router.post("/", async (req, res) => {
       }
     );
   } else {
-    // Direct LLM call without tools
     const startTime = Date.now();
     streamChat(
       session.provider,
@@ -95,18 +104,24 @@ router.post("/", async (req, res) => {
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
       },
-      async (fullText) => {
+      async (fullText, usage) => {
+        const dbStartSave = Date.now();
         try {
           await sessionService.addMessage(sessionId, "assistant", fullText);
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
-        // Send trace even for non-tool calls (just timing)
+        const dbTimeSave = Date.now() - dbStartSave;
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
         const trace = JSON.stringify({
           steps: [{ type: "direct", content: "Answered directly without tools", duration: parseFloat(totalTime) }],
           tool_calls: 0,
           total_time: parseFloat(totalTime),
+          input_tokens: usage.prompt_tokens || 0,
+          output_tokens: usage.completion_tokens || 0,
+          total_tokens: usage.total_tokens || 0,
+          db_time: dbTimeFetch + dbTimeSave,
         });
         res.write(`data: ${JSON.stringify({ type: "trace", content: trace })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);

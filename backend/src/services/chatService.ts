@@ -7,12 +7,18 @@ interface ChatMessage {
   content: string;
 }
 
+interface UsageInfo {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 export async function streamChat(
   provider: string,
   model: string,
   messages: ChatMessage[],
   onChunk: (text: string) => void,
-  onDone: (fullText: string) => void,
+  onDone: (fullText: string, usage: UsageInfo) => void,
   onError: (err: Error) => void
 ) {
   const providerConfig = getProviderConfig(provider);
@@ -41,6 +47,7 @@ export async function streamChat(
         messages,
         stream: true,
         max_tokens: 1024,
+        stream_options: { include_usage: true },
       }),
     });
 
@@ -60,6 +67,7 @@ export async function streamChat(
     const decoder = new TextDecoder();
     let fullText = "";
     let buffer = "";
+    let usage: UsageInfo = {};
 
     while (true) {
       const { done, value } = await reader.read();
@@ -83,13 +91,16 @@ export async function streamChat(
             fullText += content;
             onChunk(content);
           }
+          if (parsed.usage) {
+            usage = parsed.usage;
+          }
         } catch {
           // skip malformed chunks
         }
       }
     }
 
-    onDone(fullText);
+    onDone(fullText, usage);
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
   }

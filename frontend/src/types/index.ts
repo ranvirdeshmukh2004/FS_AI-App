@@ -21,6 +21,10 @@ export interface ReasoningTrace {
   steps: TraceStep[];
   tool_calls: number;
   total_time: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  db_time?: number;
 }
 
 export interface Message {

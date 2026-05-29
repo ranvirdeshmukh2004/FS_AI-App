@@ -15,6 +15,7 @@ export const providers: ProviderConfig[] = [
       { id: "google/gemini-2.5-pro-preview", name: "Gemini 2.5 Pro" },
       { id: "openai/gpt-4o", name: "GPT-4o" },
       { id: "meta-llama/llama-4-maverick", name: "Llama 4 Maverick" },
+      { id: "meta-llama/llama-4-scout", name: "Llama 4 Scout" },
       { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
     ],
   },
@@ -23,6 +24,8 @@ export const providers: ProviderConfig[] = [
     name: "Groq",
     baseUrl: "https://api.groq.com/openai/v1",
     defaultModels: [
+      { id: "meta-llama/llama-4-maverick-17b-128e-instruct", name: "Llama 4 Maverick" },
+      { id: "meta-llama/llama-4-scout-17b-16e-instruct", name: "Llama 4 Scout" },
       { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B" },
       { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B" },
       { id: "gemma2-9b-it", name: "Gemma 2 9B" },
