@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # 🤖 FS AI Chat
 
@@ -489,4 +489,4 @@ This project is for learning and demonstration purposes. No license specified.
 **Built to learn AWS infrastructure, full-stack architecture, and AI agent design.**
 
 </div>
-]]>
+
