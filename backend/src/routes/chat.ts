@@ -60,6 +60,8 @@ router.post("/", async (req, res) => {
   res.flushHeaders();
 
   if (useTools) {
+    let traceData: Record<string, unknown> | null = null;
+
     streamReactChat(
       session.provider,
       session.model,
@@ -68,19 +70,19 @@ router.post("/", async (req, res) => {
       googleApiKey,
       googleCx,
       (event) => {
-        // Inject db_time into trace events
         if (event.type === "trace") {
           try {
-            const traceData = JSON.parse(event.content);
-            traceData.db_time = dbTimeFetch;
-            event = { type: "trace", content: JSON.stringify(traceData) };
+            const parsed = JSON.parse(event.content);
+            parsed.db_time = dbTimeFetch;
+            traceData = parsed;
+            event = { type: "trace", content: JSON.stringify(parsed) };
           } catch { /* pass through */ }
         }
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       },
       async (fullText) => {
         try {
-          await sessionService.addMessage(sessionId, "assistant", fullText);
+          await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceData ?? undefined);
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
@@ -103,25 +105,24 @@ router.post("/", async (req, res) => {
         res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
       },
       async (fullText, usage) => {
-        const dbStartSave = Date.now();
-        try {
-          await sessionService.addMessage(sessionId, "assistant", fullText);
-        } catch (err) {
-          logger.error({ err }, "Database error saving assistant message");
-        }
-        const dbTimeSave = Date.now() - dbStartSave;
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-
-        const trace = JSON.stringify({
+        const traceObj = {
           steps: [{ type: "direct", content: "Answered directly without tools", duration: parseFloat(totalTime) }],
           tool_calls: 0,
           total_time: parseFloat(totalTime),
           input_tokens: usage.prompt_tokens || 0,
           output_tokens: usage.completion_tokens || 0,
           total_tokens: usage.total_tokens || 0,
-          db_time: dbTimeFetch + dbTimeSave,
-        });
-        res.write(`data: ${JSON.stringify({ type: "trace", content: trace })}\n\n`);
+          db_time: dbTimeFetch,
+        };
+
+        try {
+          await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceObj);
+        } catch (err) {
+          logger.error({ err }, "Database error saving assistant message");
+        }
+
+        res.write(`data: ${JSON.stringify({ type: "trace", content: JSON.stringify(traceObj) })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
         res.end();
       },

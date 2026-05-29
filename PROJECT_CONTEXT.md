@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-Full-stack AI chat platform where users enter their own API keys, select AI providers/models, and chat with streaming responses. Supports chat history, session management, and vector-based memory/semantic search.
+Full-stack AI chat platform where users enter their own API keys, select AI providers/models, and chat with streaming responses. Features a ReAct agent with 7 tools, reasoning traces, token tracking, and persistent metrics.
 
 **Purpose:** Learning/testing project to demonstrate end-to-end AWS infrastructure skills — design, deploy, configure, and manage a modern AI platform.
 
@@ -16,26 +16,22 @@ Full-stack AI chat platform where users enter their own API keys, select AI prov
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         AWS Cloud                               │
+│                         AWS Cloud (ap-south-1)                  │
 │                                                                 │
-│  ┌──────────┐    ┌──────────────┐    ┌──────────────────────┐  │
-│  │ CloudFront│───▶│   EC2 (Docker)│    │   RDS PostgreSQL     │  │
-│  │   (CDN)   │    │              │───▶│   (Chat/Session DB)  │  │
-│  └──────────┘    │  ┌────────┐  │    └──────────────────────┘  │
-│                  │  │Frontend │  │                               │
-│                  │  │ (Nginx) │  │    ┌──────────────────────┐  │
-│                  │  └────┬───┘  │    │   Qdrant (Docker)     │  │
-│                  │       │      │    │   (Vector DB)         │  │
-│                  │  ┌────▼───┐  │◀──▶│                       │  │
-│                  │  │Backend │  │    └──────────────────────┘  │
-│                  │  │(Node.js)│  │                               │
-│                  │  └────┬───┘  │                               │
-│                  │       │      │                               │
-│                  │  ┌────▼────┐ │                               │
-│                  │  │AI Svc   │ │                               │
-│                  │  │(FastAPI)│ │                               │
-│                  │  └─────────┘ │                               │
-│                  └──────────────┘                               │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    EC2 (Docker Compose)                   │  │
+│  │                                                          │  │
+│  │  ┌────────┐   ┌──────────┐   ┌───────────────────────┐ │  │
+│  │  │Frontend │──▶│ Backend  │──▶│   AI Services (Python) │ │  │
+│  │  │ (Nginx) │   │(Node.js) │   │   ReAct Agent + Tools  │ │  │
+│  │  │  :80    │   │  :4000   │   │       :8000            │ │  │
+│  │  └────────┘   └────┬─────┘   └───────────────────────┘ │  │
+│  │                     │                     │              │  │
+│  │              ┌──────▼─────┐       ┌───────▼──────┐      │  │
+│  │              │ PostgreSQL │       │   Qdrant     │      │  │
+│  │              │   :5432    │       │ :6333/:6334  │      │  │
+│  │              └────────────┘       └──────────────┘      │  │
+│  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,26 +39,113 @@ Full-stack AI chat platform where users enter their own API keys, select AI prov
 
 | Service | Tech | Port | Purpose |
 |---------|------|------|---------|
-| **frontend** | React + Vite + TypeScript + TailwindCSS | 3000 (dev) / 80 (prod) | Chat UI, settings, session sidebar |
-| **backend** | Node.js + Express + TypeScript + Prisma | 4000 | REST API, session/chat management, AI provider routing, streaming |
-| **ai-services** | Python + FastAPI | 8000 | Embeddings, vector search, memory/RAG, Qdrant communication, ReAct agent |
-
-**Why this split:** Node.js handles HTTP routing, database operations, and SSE streaming efficiently. Python is the ecosystem standard for ML/AI libraries (embeddings, vector operations). Keeping them separate allows independent scaling and deployment.
+| **frontend** | React + Vite + TypeScript + TailwindCSS | 3000 (dev) / 80 (prod) | Chat UI, settings, session sidebar, reasoning trace |
+| **backend** | Node.js + Express + TypeScript + Prisma | 4000 | REST API, session/chat management, AI provider routing, SSE streaming, Anthropic adapter |
+| **ai-services** | Python + FastAPI | 8000 | ReAct agent, 7 tools, Anthropic/OpenAI-compatible LLM calls, embeddings, vector search |
 
 ---
 
-## Tech Stack Decisions
+## AI Providers
 
-| Choice | Why |
-|--------|-----|
-| **React + Vite** | Fast HMR, modern bundling, excellent TypeScript support |
-| **TailwindCSS** | Utility-first CSS, dark mode built-in, no separate CSS files |
-| **Zustand** | Minimal state management, no boilerplate vs Redux |
-| **Express** | Mature, widely supported, simple streaming with SSE |
-| **Prisma** | Type-safe ORM, auto-generated client, easy migrations |
-| **FastAPI** | Async Python, auto-docs, Pydantic validation |
-| **Qdrant** | Purpose-built vector DB, easy Docker setup, good Python client |
-| **PostgreSQL (RDS)** | Managed, reliable, cost-effective for relational data |
+| Provider | Base URL | Models | API Format |
+|----------|----------|--------|------------|
+| **OpenRouter** | openrouter.ai/api/v1 | Claude Sonnet 4, Gemini 2.5 Pro, GPT-4o, Llama 4 Maverick, Llama 4 Scout, DeepSeek R1 | OpenAI-compatible |
+| **Groq** | api.groq.com/openai/v1 | Llama 4 Maverick, Llama 4 Scout, Llama 3.3 70B, Mixtral 8x7B, Gemma 2 9B | OpenAI-compatible |
+| **xAI (Grok)** | api.x.ai/v1 | Grok 3, Grok 3 Mini | OpenAI-compatible |
+| **OpenAI** | api.openai.com/v1 | GPT-4o, GPT-4o Mini, o3 Mini | OpenAI native |
+| **Anthropic** | api.anthropic.com/v1 | Claude Sonnet 4, Claude 3.5 Haiku, Claude Opus 4 | Anthropic Messages API (x-api-key, /v1/messages) |
+
+Anthropic uses a different API format — both the backend chatService and the Python ReAct agent detect `anthropic.com` in the URL and switch to the Messages API format automatically.
+
+---
+
+## ReAct Framework
+
+The app includes a ReAct (Reasoning + Acting) agent with 7 tools.
+
+### How it works
+1. When "Tools" is enabled in Settings, chat requests route through the ReAct agent
+2. The agent sends a system prompt with all tool descriptions to the LLM
+3. The LLM can emit `Thought → Action → Action Input` to call a tool
+4. The agent executes the tool, returns the `Observation`, and loops
+5. Up to 8 tool steps per message; simple questions get direct answers
+
+### Available Tools (all free, no API keys needed)
+
+| Tool | Description | Example Input |
+|------|-------------|---------------|
+| **web_search** | Search via DuckDuckGo or Google Custom Search | "latest AI news" |
+| **wikipedia** | Encyclopedia lookups | "quantum computing" |
+| **calculator** | Safe math (ast-based): arithmetic, sqrt, log, trig, factorial | "(45*3) + sqrt(144)" |
+| **datetime** | Current time, timezone conversion, date math | "convert EST to IST" |
+| **weather** | Current weather via wttr.in (free) | "London" |
+| **read_url** | Fetch & extract text from any URL | "https://example.com" |
+| **python_executor** | Sandboxed Python (math, statistics, json, re, collections, datetime) | "print(sum(range(100)))" |
+
+### Search Engine Toggle
+- **DuckDuckGo** — default, no API key, HTML scraping
+- **Google Custom Search** — requires API key + CX ID (entered in Settings UI)
+- Falls back to DuckDuckGo if Google credentials missing
+
+### Google Custom Search Setup
+1. Google Cloud Console → enable Custom Search API → create API Key
+2. Programmable Search Engine → create engine → enable "Search entire web" → copy CX ID
+3. Enter both in Settings → ReAct Tools → Google section
+4. Free tier: 100 queries/day
+
+### Request Flow
+```
+Frontend → Backend /api/chat {useTools:true, searchEngine:"duckduckgo"}
+  → Backend calls ai-services /api/react/chat with provider credentials
+    → ReAct agent calls LLM (OpenAI or Anthropic format)
+    → Parses Thought/Action/Action Input
+    → Executes tool, feeds Observation back
+    → Streams SSE: thinking → tool → observation → chunk → trace → done
+  → Backend saves trace as message metadata in PostgreSQL
+  → Backend forwards all SSE events to frontend
+```
+
+### SSE Event Types
+| Type | Description |
+|------|-------------|
+| thinking | Agent's reasoning (Thought lines) |
+| tool | Tool being called ("Using web_search: query") |
+| observation | Tool result summary ("web_search returned results (1.2s)") |
+| chunk | Final answer content |
+| trace | JSON with steps, tool_calls, timing, token counts |
+| done | Complete final answer |
+| error | Error message |
+
+---
+
+## Metrics & Reasoning Trace (Persisted)
+
+Every assistant message stores its trace in the `metadata` JSON column:
+
+```json
+{
+  "steps": [
+    {"type": "thought", "content": "I need to search...", "duration": 1.5},
+    {"type": "action", "tool": "web_search", "input": "latest news"},
+    {"type": "observation", "tool": "web_search", "content": "...", "duration": 0.8}
+  ],
+  "tool_calls": 2,
+  "total_time": 4.2,
+  "input_tokens": 1500,
+  "output_tokens": 800,
+  "total_tokens": 2300,
+  "db_time": 45
+}
+```
+
+**Displayed under each response:**
+- Total time (seconds)
+- Tool call count
+- Token breakdown: input / output / total
+- Database time (ms)
+- Expandable "Reasoning trace" — click to see step-by-step Thought → Action → Observation
+
+**Persisted:** Trace survives page reload, session switching, and days later — it's stored in PostgreSQL alongside the message.
 
 ---
 
@@ -75,231 +158,100 @@ FS_AI-App/
 │   │   ├── components/
 │   │   │   ├── chat/          # ChatView, ChatInput, MessageBubble, StreamingBubble
 │   │   │   ├── sidebar/       # Sidebar with session list
-│   │   │   ├── settings/      # API key management view
+│   │   │   ├── settings/      # API keys, ReAct tools toggle, Google search config
 │   │   │   └── common/        # ThemeToggle, ModelSelector
-│   │   ├── hooks/             # Custom React hooks
-│   │   ├── services/          # API client (api.ts)
+│   │   ├── services/          # API client (api.ts) — SSE streaming with trace events
 │   │   ├── stores/            # Zustand state (appStore.ts)
-│   │   ├── types/             # TypeScript interfaces
-│   │   ├── styles/            # Tailwind entry CSS
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── Dockerfile
-│   ├── nginx.conf             # Frontend container Nginx config
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   └── package.json
+│   │   ├── types/             # TypeScript interfaces (Message with trace, ReasoningTrace)
+│   │   └── styles/            # Tailwind entry CSS
+│   ├── Dockerfile             # node:22-alpine build → nginx:alpine serve
+│   └── nginx.conf             # SPA + /api/ proxy to backend:4000
 │
 ├── backend/                   # Node.js + Express + TypeScript
 │   ├── src/
-│   │   ├── config/            # App config, provider definitions
-│   │   ├── routes/            # sessions, chat, apiKeys, providers
-│   │   ├── services/          # sessionService, apiKeyService, chatService
-│   │   ├── middleware/        # Error handler
-│   │   ├── prisma/            # Prisma client singleton
-│   │   ├── utils/             # Logger (Pino), crypto (AES-256-GCM)
-│   │   └── index.ts           # Express entry point
-│   ├── prisma/
-│   │   └── schema.prisma      # Database schema
-│   ├── Dockerfile
-│   └── package.json
+│   │   ├── config/providers.ts   # 5 providers: OpenRouter, Groq, xAI, OpenAI, Anthropic
+│   │   ├── routes/chat.ts        # POST /api/chat — tools/no-tools routing, trace persistence
+│   │   ├── services/
+│   │   │   ├── chatService.ts    # OpenAI-compatible + Anthropic Messages API streaming
+│   │   │   ├── reactService.ts   # Calls ai-services /api/react/chat, forwards SSE
+│   │   │   ├── apiKeyService.ts  # AES-256-GCM key encryption
+│   │   │   └── sessionService.ts # Prisma CRUD with metadata (trace) support
+│   │   └── utils/                # Logger (Pino), crypto
+│   ├── prisma/schema.prisma      # Message model has `metadata Json?` for traces
+│   └── Dockerfile
 │
 ├── ai-services/               # Python + FastAPI
 │   ├── app/
-│   │   ├── api/routes/        # memory.py, react.py (ReAct agent endpoint)
-│   │   ├── config/            # Pydantic settings
-│   │   ├── services/          # embedding_service, vector_service, react_agent
-│   │   │   └── tools/         # web_search.py, wikipedia.py
-│   │   ├── models/            # Pydantic schemas
-│   │   └── main.py            # FastAPI entry point
-│   ├── Dockerfile
+│   │   ├── api/routes/
+│   │   │   ├── memory.py      # Embedding + vector search endpoints
+│   │   │   └── react.py       # POST /api/react/chat — streaming SSE
+│   │   ├── services/
+│   │   │   ├── react_agent.py # ReAct loop: LLM → parse → tool → observe → repeat
+│   │   │   └── tools/         # 7 tools + web_search (DuckDuckGo/Google)
+│   │   │       ├── calculator.py
+│   │   │       ├── datetime_tool.py
+│   │   │       ├── weather.py
+│   │   │       ├── read_url.py
+│   │   │       ├── python_executor.py
+│   │   │       ├── web_search.py
+│   │   │       └── wikipedia.py
+│   │   └── main.py
 │   └── requirements.txt
 │
-├── docker/
-│   └── nginx/                 # Production Nginx reverse proxy config
-│
-├── scripts/
-│   ├── deploy.sh              # EC2 deployment script (SSM)
-│   └── setup-ssl.sh           # Let's Encrypt SSL setup
-│
-├── docker-compose.yml         # Full production stack
-├── docker-compose.dev.yml     # Dev databases only (Postgres + Qdrant)
-├── PROJECT_CONTEXT.md         # This file
-└── .gitignore
+├── docker-compose.yml         # 5 services: frontend, backend, ai-services, postgres, qdrant
+├── docker-compose.dev.yml     # Dev: postgres + qdrant only
+└── PROJECT_CONTEXT.md         # This file
 ```
 
 ---
 
-## Database Schema
+## Database Schema (PostgreSQL)
 
-### PostgreSQL (RDS)
+### Messages table — `metadata` column stores trace
+```sql
+-- After running: docker compose exec backend npx prisma db push
+messages (
+  id          UUID PRIMARY KEY,
+  session_id  UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  role        message_role (user/assistant/system),
+  content     TEXT,
+  tokens      INTEGER,
+  metadata    JSONB,          -- ← stores ReasoningTrace for assistant messages
+  created_at  TIMESTAMP
+)
+```
 
-**chat_sessions**
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID (PK) | Session identifier |
-| title | String | Chat session title (auto-generated from first message) |
-| provider | String | AI provider ID (openrouter, groq, xai, openai) |
-| model | String | Model ID used in this session |
-| created_at | DateTime | Creation timestamp |
-| updated_at | DateTime | Last activity timestamp |
-
-**messages**
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID (PK) | Message identifier |
-| session_id | UUID (FK) | References chat_sessions.id (CASCADE delete) |
-| role | Enum | user, assistant, system |
-| content | String | Message content |
-| tokens | Int? | Token count (optional) |
-| created_at | DateTime | Timestamp |
-
-**api_keys**
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID (PK) | Key identifier |
-| provider | String (UNIQUE) | Provider ID — one key per provider |
-| key | String | AES-256-GCM encrypted API key |
-| label | String? | Optional user label |
-| created_at | DateTime | Timestamp |
-| updated_at | DateTime | Timestamp |
-
-**provider_models**
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID (PK) | Record identifier |
-| provider | String | Provider ID |
-| model_id | String | Model identifier |
-| name | String | Display name |
-| active | Boolean | Whether model is available |
-
-### Qdrant (Vector DB)
-
-**Collection:** `chat_memory`
-- Vector size: 1536 (text-embedding-3-small)
-- Distance: Cosine similarity
-- Payload fields: `text`, `session_id`, custom metadata
+### Other tables
+- **chat_sessions** — id, title, provider, model, created_at, updated_at
+- **api_keys** — provider (unique), AES-256-GCM encrypted key, label
+- **provider_models** — provider, model_id, name, active
 
 ---
 
 ## API Structure
 
-### Backend API (port 4000)
+### Backend (port 4000)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/chat | Send message + receive SSE stream. Params: useTools, searchEngine, googleApiKey, googleCx |
+| GET | /api/sessions | List sessions |
+| GET | /api/sessions/:id | Get session with messages (includes metadata/trace) |
+| POST | /api/sessions | Create session |
+| PATCH | /api/sessions/:id/title | Update title |
+| DELETE | /api/sessions/:id | Delete session |
+| GET | /api/providers | List providers with models |
+| GET/POST/DELETE | /api/keys | Manage encrypted API keys |
+| POST | /api/keys/test | Validate key against provider |
+
+### AI Services (port 8000)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | /api/health | Health check |
-| GET | /api/sessions | List all chat sessions |
-| GET | /api/sessions/:id | Get session with messages |
-| POST | /api/sessions | Create new session |
-| PATCH | /api/sessions/:id/title | Update session title |
-| DELETE | /api/sessions/:id | Delete session and messages |
-| POST | /api/chat | Send message, receive SSE stream (supports useTools + searchEngine params) |
-| GET | /api/providers | List available providers and models |
-| GET | /api/keys | List configured API keys (masked) |
-| POST | /api/keys | Add/update an API key |
-| DELETE | /api/keys/:provider | Remove an API key |
-
-### AI Services API (port 8000)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/health | Health check (includes Qdrant status) |
-| POST | /api/memory/embed | Generate embedding and store in Qdrant |
-| POST | /api/memory/search | Semantic search across stored embeddings |
-| POST | /api/react/chat | ReAct agent endpoint (tool-augmented chat with streaming SSE) |
-
----
-
-## AI Providers
-
-| Provider | Base URL | Key Models |
-|----------|----------|------------|
-| **OpenRouter** | openrouter.ai/api/v1 | Claude Sonnet 4, Gemini 2.5 Pro, GPT-4o, Llama 4, DeepSeek R1 |
-| **Groq** | api.groq.com/openai/v1 | Llama 3.3 70B, Mixtral 8x7B, Gemma 2 9B |
-| **xAI (Grok)** | api.x.ai/v1 | Grok 3, Grok 3 Mini |
-| **OpenAI** | api.openai.com/v1 | GPT-4o, GPT-4o Mini, o3 Mini |
-
-All providers use OpenAI-compatible `/chat/completions` endpoint with streaming. The backend routes requests to the appropriate provider based on the session's provider setting.
-
----
-
-## AWS Services
-
-| Service | Purpose | Why |
-|---------|---------|-----|
-| **EC2** (t3.medium) | Hosts Docker containers (backend, frontend, AI services, Qdrant) | Cost-effective for a single-instance learning project |
-| **RDS** (db.t3.micro) | Managed PostgreSQL | Automated backups, patching, no DB admin overhead |
-| **S3** | Static frontend assets (optional, alternative to Docker-served frontend) | Cheap, scalable static hosting |
-| **CloudFront** | CDN for frontend (pairs with S3) | Low-latency global delivery |
-| **Route53** | DNS management | AWS-native, easy integration with ACM/CloudFront |
-| **ACM** | Free SSL/TLS certificates | Auto-renewal, works with CloudFront/ALB |
-| **IAM** | Roles and permissions | SSM access requires an instance role |
-| **CloudWatch** | Logs and monitoring | Container logs, basic alerts |
-| **SSM** | EC2 access without SSH | No .pem file needed, browser-based terminal |
-
-### Cost Estimate (Monthly, us-east-1)
-
-| Resource | Estimate |
-|----------|----------|
-| EC2 t3.medium (on-demand) | ~$30 |
-| RDS db.t3.micro (single-AZ) | ~$15 |
-| S3 + CloudFront (low traffic) | ~$1-2 |
-| Route53 hosted zone | ~$0.50 |
-| Data transfer | ~$1-5 |
-| **Total** | **~$48-53/month** |
-
-**Cost optimization tips:**
-- Use EC2 Savings Plans or Spot Instances for ~60% savings
-- RDS db.t3.micro is Free Tier eligible for 12 months
-- Stop EC2 when not in use (Qdrant data persists in EBS volume)
-
----
-
-## SSM Session Manager Setup
-
-Since you have an existing EC2 key pair but no .pem file, use SSM instead of SSH.
-
-### Required IAM Role for EC2
-
-Create an IAM role with these policies attached:
-1. **AmazonSSMManagedInstanceCore** — required for SSM Session Manager
-2. **CloudWatchAgentServerPolicy** — optional, for CloudWatch logs
-
-### Steps
-
-1. **Create the IAM Role:**
-   - Go to IAM > Roles > Create Role
-   - Trusted entity: AWS service > EC2
-   - Attach policy: `AmazonSSMManagedInstanceCore`
-   - Name it: `EC2-SSM-Role`
-
-2. **Attach Role to EC2:**
-   - EC2 Console > Select your instance > Actions > Security > Modify IAM Role
-   - Select `EC2-SSM-Role` > Update
-
-3. **Ensure SSM Agent is running** (Amazon Linux 2/2023 has it pre-installed):
-   ```
-   sudo systemctl status amazon-ssm-agent
-   sudo systemctl enable amazon-ssm-agent
-   sudo systemctl start amazon-ssm-agent
-   ```
-
-4. **Connect via browser:**
-   - EC2 Console > Select instance > Connect > Session Manager tab > Connect
-   - Or: AWS Systems Manager > Session Manager > Start a session
-
-5. **Connect via CLI:**
-   ```bash
-   aws ssm start-session --target i-your-instance-id
-   ```
-
-### Security Group Requirements
-Your existing Security Group needs these inbound rules:
-- **Port 80** (HTTP) — from 0.0.0.0/0
-- **Port 443** (HTTPS) — from 0.0.0.0/0
-- **Port 5432** — from EC2 security group only (for RDS)
-- SSM does NOT need port 22 open
+| POST | /api/react/chat | ReAct agent — streaming SSE with trace |
+| POST | /api/memory/embed | Store embedding in Qdrant |
+| POST | /api/memory/search | Semantic search |
 
 ---
 
@@ -309,7 +261,7 @@ Your existing Security Group needs these inbound rules:
 ```
 PORT=4000
 NODE_ENV=production
-DATABASE_URL=postgresql://postgres:<password>@<rds-endpoint>:5432/fs_ai_chat
+DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/fs_ai_chat
 AI_SERVICES_URL=http://ai-services:8000
 ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
@@ -318,166 +270,56 @@ ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
 QDRANT_HOST=qdrant
 QDRANT_PORT=6333
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
 ```
 
 ---
 
-## Deployment Steps
+## Deployment
 
-### Local Development
-
+### EC2 (current setup)
 ```bash
-# 1. Start databases
-docker compose -f docker-compose.dev.yml up -d
+cd ~/FS_AI-App
+git pull
+docker compose up -d --build --force-recreate
 
-# 2. Setup backend
-cd backend
-cp .env.example .env  # edit DATABASE_URL to localhost
-npm install
-npx prisma db push
-npm run dev
-
-# 3. Setup AI services
-cd ai-services
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-
-# 4. Setup frontend
-cd frontend
-npm install
-npm run dev
+# After schema changes:
+docker compose exec backend npx prisma db push
 ```
 
-### AWS Production Deployment
-
-```bash
-# 1. Launch EC2 (t3.medium, Amazon Linux 2023)
-#    - Use your existing Security Group
-#    - Use your existing Key Pair
-#    - Attach the EC2-SSM-Role IAM role
-
-# 2. Create RDS PostgreSQL (db.t3.micro)
-#    - Same VPC as EC2
-#    - Security group allows port 5432 from EC2's SG
-
-# 3. Connect to EC2 via SSM Session Manager (browser or CLI)
-
-# 4. Run deployment
-git clone <your-repo-url> ~/fs-ai-app
-cd ~/fs-ai-app
-bash scripts/deploy.sh
-
-# 5. Configure environment
-#    Edit backend/.env with RDS endpoint
-#    Run: docker compose exec backend npx prisma db push
-
-# 6. (Optional) Setup SSL
-bash scripts/setup-ssl.sh your-domain.com
-```
-
----
-
-## Important Commands
-
-```bash
-# Docker
-docker compose up -d --build          # Build and start all services
-docker compose logs -f backend         # Tail backend logs
-docker compose exec backend sh         # Shell into backend container
-docker compose down                    # Stop all services
-
-# Database
-docker compose exec backend npx prisma db push     # Apply schema
-docker compose exec backend npx prisma studio       # Visual DB editor
-docker compose exec backend npx prisma migrate dev  # Create migration
-
-# Qdrant
-curl http://localhost:6333/collections               # List collections
-curl http://localhost:6333/collections/chat_memory    # Collection info
-
-# SSM
-aws ssm start-session --target i-<instance-id>       # Connect to EC2
-```
-
----
-
-## Security Considerations
-
-- **API keys are encrypted at rest** using AES-256-GCM before storing in PostgreSQL
-- **No authentication** — this is a single-user learning project, not exposed publicly without caution
-- **CORS** is configured permissively for development; tighten for production
-- **RDS** should only be accessible from the EC2 security group, not publicly
-- **SSM** eliminates the need for SSH keys and open port 22
-- **Environment variables** are kept in `.env` files (gitignored), not hardcoded
+### Key Infra
+- **EC2 IP:** 13.127.237.180 (ap-south-1)
+- **Security Group:** BNOVA-Security-Group (ports 22/80/443/8080)
+- **Database:** Docker Postgres (local, not RDS — RDS was unreachable)
+- **Access:** SSM Session Manager (no .pem file)
 
 ---
 
 ## Current Status
 
-- [x] Project architecture designed
-- [x] Folder structure created
-- [x] Frontend scaffolded (React + Vite + Tailwind + Zustand)
-- [x] Backend scaffolded (Express + Prisma + streaming)
-- [x] AI services scaffolded (FastAPI + Qdrant)
-- [x] Docker setup (Compose + Dockerfiles)
-- [x] Nginx reverse proxy config
-- [x] Deployment scripts (SSM-based)
-- [x] PROJECT_CONTEXT.md created
-- [x] Deployed to AWS (EC2 + Docker Postgres + Qdrant)
-- [x] Chat streaming working (SSE with callback pattern)
-- [x] ReAct framework with web search (DuckDuckGo/Google) + Wikipedia tools
-- [x] Search engine toggle in Settings UI
-- [ ] Configure domain + SSL
-- [ ] Add RAG context injection into chat flow
-- [ ] Add usage/token tracking
+- [x] Full-stack architecture (React + Express + FastAPI + Docker)
+- [x] Chat with SSE streaming (callback pattern, not async generators)
+- [x] 5 AI providers: OpenRouter, Groq, xAI, OpenAI, Anthropic
+- [x] Anthropic Messages API adapter (both backend + Python agent)
+- [x] ReAct agent with 7 tools (all free)
+- [x] Search engine toggle (DuckDuckGo/Google) with Google API key input
+- [x] Token tracking (input/output/total across all ReAct steps)
+- [x] Timing metrics (total, per-step, DB time)
+- [x] Reasoning trace — collapsible, persisted in DB
+- [x] Metrics persistence — trace survives page reload and session re-open
+- [x] Llama 4 Scout + Maverick on both OpenRouter and Groq
+- [x] Dark/light mode, session management, API key encryption
+- [ ] Domain + SSL (Let's Encrypt)
+- [ ] RAG context injection from Qdrant into chat flow
+- [ ] File upload for read_file / doc_search tools
 
 ---
 
-## ReAct Framework
+## Important: After Schema Changes
 
-The app includes a ReAct (Reasoning + Acting) agent that gives LLMs access to external tools.
+Since the Prisma schema now has a new `metadata` column on the Message model, you **must** run:
 
-### How it works
-1. When "Tools" is enabled in Settings, chat requests go through the ReAct agent instead of direct LLM calls
-2. The agent adds a system prompt telling the LLM about available tools and the Thought/Action/Action Input format
-3. If the LLM decides to use a tool, it emits `Action: tool_name` and `Action Input: query`
-4. The agent parses this, executes the tool, and feeds the result back as an `Observation`
-5. The LLM can use multiple tools (up to 6 steps) before giving a `Final Answer`
-6. For simple questions, the LLM responds directly without using tools
-
-### Available Tools
-- **web_search** — Search the web via DuckDuckGo (default) or Google Custom Search API
-- **wikipedia** — Search Wikipedia for encyclopedic information
-
-### Request Flow
-```
-Frontend → Backend /api/chat {useTools:true, searchEngine:"duckduckgo"}
-  → Backend calls ai-services /api/react/chat with provider credentials
-    → ReAct agent calls LLM, parses tool calls, executes tools
-    → Streams SSE events: thinking → tool → chunk → done
-  → Backend forwards SSE to frontend
+```bash
+docker compose exec backend npx prisma db push
 ```
 
-### SSE Event Types
-| Type | Description |
-|------|-------------|
-| thinking | Agent's reasoning (Thought lines) |
-| tool | Tool being called (e.g., "Searching web_search: query") |
-| chunk | Final answer content |
-| done | Complete final answer |
-| error | Error message |
-
----
-
-## Pending Enhancements
-
-1. **RAG integration in chat flow** — Before sending messages to the AI provider, query Qdrant for relevant context and inject it as a system message
-2. **Token usage tracking** — Parse provider responses for token counts, store in messages table
-3. **Session auto-titling** — Use the AI to generate a better title after the first exchange
-4. **Export/import** — Export chat sessions as JSON or Markdown
-5. **S3 + CloudFront frontend** — Alternative to Docker-served frontend for better caching and CDN
-6. **Google Custom Search API** — Server-side configuration for Google search in ReAct tools
+This adds the `metadata` JSONB column to the existing `messages` table without losing data.

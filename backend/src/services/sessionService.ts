@@ -49,10 +49,11 @@ export async function addMessage(
   sessionId: string,
   role: "user" | "assistant" | "system",
   content: string,
-  tokens?: number
+  tokens?: number,
+  metadata?: Record<string, unknown>
 ) {
   const message = await prisma.message.create({
-    data: { sessionId, role, content, tokens },
+    data: { sessionId, role, content, tokens, metadata: metadata ?? undefined },
   });
 
   await prisma.chatSession.update({

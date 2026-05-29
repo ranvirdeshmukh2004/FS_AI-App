@@ -90,9 +90,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     api.getSession(id)
       .then((session) => {
         if (session) {
+          const msgs = (session.messages || []).map((m) => {
+            const msg: Message = { ...m };
+            // Restore trace from DB metadata field
+            if (m.role === "assistant" && (m as unknown as Record<string, unknown>).metadata) {
+              const meta = (m as unknown as Record<string, unknown>).metadata as Record<string, unknown>;
+              if (meta && typeof meta === "object" && "steps" in meta) {
+                msg.trace = meta as unknown as ReasoningTrace;
+              }
+            }
+            return msg;
+          });
           set({
             activeSessionId: id,
-            messages: session.messages || [],
+            messages: msgs,
             selectedProvider: session.provider,
             selectedModel: session.model,
             view: "chat",

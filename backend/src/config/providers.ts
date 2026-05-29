@@ -50,6 +50,16 @@ export const providers: ProviderConfig[] = [
       { id: "o3-mini", name: "o3 Mini" },
     ],
   },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    defaultModels: [
+      { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
+      { id: "claude-haiku-3-5-20241022", name: "Claude 3.5 Haiku" },
+      { id: "claude-opus-4-20250514", name: "Claude Opus 4" },
+    ],
+  },
 ];
 
 export function getProviderConfig(providerId: string): ProviderConfig | undefined {
