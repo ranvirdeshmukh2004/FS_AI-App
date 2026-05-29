@@ -7,11 +7,14 @@ Implements a tool-augmented LLM loop:
   3. Execute the requested tool
   4. Feed the Observation back and repeat
   5. When the LLM emits "Final Answer:", return that to the user
+
+Emits detailed trace events for the frontend reasoning trace panel.
 """
 
 import json
 import logging
 import re
+import time
 from typing import AsyncGenerator
 
 import httpx
@@ -153,121 +156,6 @@ async def _call_llm(
         return content or ""
 
 
-async def _call_llm_stream(
-    base_url: str,
-    api_key: str,
-    model: str,
-    messages: list[dict],
-) -> AsyncGenerator[str, None]:
-    """Call the LLM with streaming and yield content chunks."""
-    url = f"{base_url}/chat/completions"
-    async with httpx.AsyncClient(timeout=60) as client:
-        async with client.stream(
-            "POST",
-            url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-            json={
-                "model": model,
-                "messages": messages,
-                "max_tokens": 2048,
-                "temperature": 0.3,
-                "stream": True,
-            },
-        ) as resp:
-            if resp.status_code != 200:
-                error_text = await resp.aread()
-                raise Exception(f"LLM API returned {resp.status_code}: {error_text.decode()}")
-
-            buffer = ""
-            async for line in resp.aiter_lines():
-                line = line.strip()
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                    content = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                    if content:
-                        yield content
-                except json.JSONDecodeError:
-                    continue
-
-
-async def run_react_agent(
-    base_url: str,
-    api_key: str,
-    model: str,
-    conversation_messages: list[dict],
-    search_engine: str = "duckduckgo",
-    google_api_key: str | None = None,
-    google_cx: str | None = None,
-) -> str:
-    """
-    Run the ReAct agent loop (non-streaming).
-    Returns the final answer string.
-    """
-    system_prompt = _build_system_prompt(search_engine)
-
-    # Build messages with system prompt
-    messages = [
-        {"role": "system", "content": system_prompt},
-        *conversation_messages,
-    ]
-
-    for step in range(MAX_REACT_STEPS):
-        logger.info("ReAct step %d/%d", step + 1, MAX_REACT_STEPS)
-
-        # Call the LLM
-        response_text = await _call_llm(base_url, api_key, model, messages)
-        logger.debug("LLM response: %s", response_text[:200])
-
-        # Check for final answer first
-        final_answer = _parse_final_answer(response_text)
-        if final_answer and not _has_action(response_text.split("Final Answer:")[0]):
-            return final_answer
-
-        # Check if the response has no action - treat as direct answer
-        if not _has_action(response_text):
-            return response_text
-
-        # Parse the action
-        action, action_input = _parse_action(response_text)
-        if not action or not action_input:
-            # Malformed action, return whatever we got
-            return response_text
-
-        # Execute the tool
-        logger.info("Executing tool: %s(%s)", action, action_input[:50])
-        try:
-            observation = await _execute_tool(
-                action, action_input, search_engine, google_api_key, google_cx
-            )
-        except Exception as e:
-            observation = f"Tool execution failed: {str(e)}"
-            logger.error("Tool execution failed: %s", e)
-
-        # Add the assistant response and observation to messages
-        messages.append({"role": "assistant", "content": response_text})
-        messages.append({
-            "role": "user",
-            "content": f"Observation: {observation}\n\nBased on this observation, continue your reasoning. If you have enough information, provide your Final Answer. If not, use another tool.",
-        })
-
-    # If we exhausted steps, ask LLM for final answer
-    messages.append({
-        "role": "user",
-        "content": "You have used all available tool steps. Please provide your Final Answer now based on all the information gathered.",
-    })
-    final_response = await _call_llm(base_url, api_key, model, messages)
-    final_answer = _parse_final_answer(final_response)
-    return final_answer or final_response
-
-
 async def run_react_agent_stream(
     base_url: str,
     api_key: str,
@@ -279,13 +167,16 @@ async def run_react_agent_stream(
 ) -> AsyncGenerator[dict, None]:
     """
     Run the ReAct agent with streaming.
-    Yields dicts: {"type": "thinking"|"tool"|"chunk"|"done", "content": str}
+    Yields dicts with these event types:
 
-    - "thinking": The agent's reasoning (Thought lines)
-    - "tool": Tool being called and its results
-    - "chunk": Streaming text of the final answer
-    - "done": Final assembled answer
+    - "thinking":  Agent's reasoning text
+    - "tool":      Tool being called (action + input)
+    - "observation": Summarized tool result
+    - "chunk":     Final answer content
+    - "done":      Final assembled answer
+    - "trace":     Complete reasoning trace with timing + tool count
     """
+    start_time = time.time()
     system_prompt = _build_system_prompt(search_engine)
 
     messages = [
@@ -293,48 +184,116 @@ async def run_react_agent_stream(
         *conversation_messages,
     ]
 
+    # Collect trace steps for the reasoning trace panel
+    trace_steps: list[dict] = []
+    tool_call_count = 0
+
     for step in range(MAX_REACT_STEPS):
+        step_start = time.time()
         logger.info("ReAct stream step %d/%d", step + 1, MAX_REACT_STEPS)
 
         # Collect full LLM response (we need to parse it for actions)
         full_response = await _call_llm(base_url, api_key, model, messages)
+        llm_duration = round(time.time() - step_start, 2)
 
         # Check for final answer
         final_answer = _parse_final_answer(full_response)
         if final_answer and not _has_action(full_response.split("Final Answer:")[0]):
-            # Stream the final answer
+            # Extract thought if present
+            thought_match = re.search(r"Thought:\s*(.+?)(?=\nFinal Answer:)", full_response, re.DOTALL)
+            if thought_match:
+                trace_steps.append({
+                    "type": "thought",
+                    "content": thought_match.group(1).strip(),
+                    "duration": llm_duration,
+                })
+
+            # Emit final answer
+            total_duration = round(time.time() - start_time, 2)
             yield {"type": "chunk", "content": final_answer}
+            yield {
+                "type": "trace",
+                "content": json.dumps({
+                    "steps": trace_steps,
+                    "tool_calls": tool_call_count,
+                    "total_time": total_duration,
+                }),
+            }
             yield {"type": "done", "content": final_answer}
             return
 
-        # No action = direct answer
+        # No action = direct answer (LLM didn't use tools at all)
         if not _has_action(full_response):
+            total_duration = round(time.time() - start_time, 2)
             yield {"type": "chunk", "content": full_response}
+            yield {
+                "type": "trace",
+                "content": json.dumps({
+                    "steps": trace_steps if trace_steps else [{"type": "direct", "content": "Answered directly without tools", "duration": llm_duration}],
+                    "tool_calls": 0,
+                    "total_time": total_duration,
+                }),
+            }
             yield {"type": "done", "content": full_response}
             return
 
         # Parse action
         action, action_input = _parse_action(full_response)
         if not action or not action_input:
+            total_duration = round(time.time() - start_time, 2)
             yield {"type": "chunk", "content": full_response}
+            yield {
+                "type": "trace",
+                "content": json.dumps({
+                    "steps": trace_steps,
+                    "tool_calls": tool_call_count,
+                    "total_time": total_duration,
+                }),
+            }
             yield {"type": "done", "content": full_response}
             return
 
-        # Emit thinking
+        # Extract and emit thinking
         thought_match = re.search(r"Thought:\s*(.+?)(?=\nAction:)", full_response, re.DOTALL)
-        if thought_match:
-            yield {"type": "thinking", "content": thought_match.group(1).strip()}
+        thought_text = thought_match.group(1).strip() if thought_match else ""
+        if thought_text:
+            yield {"type": "thinking", "content": thought_text}
+            trace_steps.append({
+                "type": "thought",
+                "content": thought_text,
+                "duration": llm_duration,
+            })
 
         # Emit tool call
         yield {"type": "tool", "content": f"Searching {action}: {action_input}"}
+        trace_steps.append({
+            "type": "action",
+            "tool": action,
+            "input": action_input,
+        })
 
-        # Execute tool
+        # Execute tool with timing
+        tool_start = time.time()
         try:
             observation = await _execute_tool(
                 action, action_input, search_engine, google_api_key, google_cx
             )
         except Exception as e:
             observation = f"Tool execution failed: {str(e)}"
+        tool_duration = round(time.time() - tool_start, 2)
+        tool_call_count += 1
+
+        # Summarize observation for trace (truncate to keep it readable)
+        obs_summary = observation[:300] + "..." if len(observation) > 300 else observation
+        trace_steps.append({
+            "type": "observation",
+            "tool": action,
+            "content": obs_summary,
+            "duration": tool_duration,
+        })
+
+        # Emit observation event so frontend can show tool status
+        yield {"type": "observation", "content": f"{action} returned results ({tool_duration}s)"}
 
         # Add to message history
         messages.append({"role": "assistant", "content": full_response})
@@ -350,5 +309,15 @@ async def run_react_agent_stream(
     })
     final_response = await _call_llm(base_url, api_key, model, messages)
     final_answer = _parse_final_answer(final_response) or final_response
+
+    total_duration = round(time.time() - start_time, 2)
     yield {"type": "chunk", "content": final_answer}
+    yield {
+        "type": "trace",
+        "content": json.dumps({
+            "steps": trace_steps,
+            "tool_calls": tool_call_count,
+            "total_time": total_duration,
+        }),
+    }
     yield {"type": "done", "content": final_answer}

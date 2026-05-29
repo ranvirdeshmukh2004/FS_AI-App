@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatSession, Message, Provider, SearchEngine, Theme, View } from "@/types";
+import type { ChatSession, Message, Provider, ReasoningTrace, SearchEngine, Theme, View } from "@/types";
 import { api } from "@/services/api";
 
 function generateId(): string {
@@ -21,7 +21,10 @@ interface AppState {
   error: string | null;
   useTools: boolean;
   searchEngine: SearchEngine;
-  toolActivity: string | null; // shows "Searching web_search: ..." while tools run
+  googleApiKey: string;
+  googleCx: string;
+  toolActivity: string | null;
+  pendingTrace: ReasoningTrace | null;
 
   toggleTheme: () => void;
   setView: (view: View) => void;
@@ -40,6 +43,8 @@ interface AppState {
 
   setUseTools: (enabled: boolean) => void;
   setSearchEngine: (engine: SearchEngine) => void;
+  setGoogleApiKey: (key: string) => void;
+  setGoogleCx: (cx: string) => void;
 
   sendMessage: (content: string) => void;
 }
@@ -59,7 +64,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   useTools: true,
   searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
+  googleApiKey: localStorage.getItem("googleApiKey") || "",
+  googleCx: localStorage.getItem("googleCx") || "",
   toolActivity: null,
+  pendingTrace: null,
 
   toggleTheme: () => {
     const newTheme = get().theme === "dark" ? "light" : "dark";
@@ -147,6 +155,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem("searchEngine", engine);
     set({ searchEngine: engine });
   },
+  setGoogleApiKey: (key) => {
+    localStorage.setItem("googleApiKey", key);
+    set({ googleApiKey: key });
+  },
+  setGoogleCx: (cx) => {
+    localStorage.setItem("googleCx", cx);
+    set({ googleCx: cx });
+  },
 
   sendMessage: (content) => {
     const state = get();
@@ -164,13 +180,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: new Date().toISOString(),
       };
 
-      const { useTools, searchEngine } = get();
+      const { useTools, searchEngine, googleApiKey, googleCx } = get();
 
       set((s) => ({
         messages: [...s.messages, userMessage],
         isStreaming: true,
         streamingContent: "",
         toolActivity: null,
+        pendingTrace: null,
       }));
 
       let fullContent = "";
@@ -184,6 +201,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         (doneText) => {
           const finalContent = doneText || fullContent;
+          const trace = get().pendingTrace;
           if (finalContent) {
             const assistantMessage: Message = {
               id: generateId(),
@@ -191,18 +209,21 @@ export const useAppStore = create<AppState>((set, get) => ({
               role: "assistant",
               content: finalContent,
               createdAt: new Date().toISOString(),
+              trace: trace || undefined,
             };
             set((s) => ({
               messages: [...s.messages, assistantMessage],
               isStreaming: false,
               streamingContent: "",
               toolActivity: null,
+              pendingTrace: null,
             }));
           } else {
             set({
               isStreaming: false,
               streamingContent: "",
               toolActivity: null,
+              pendingTrace: null,
               error: "No response received from AI. Check your API key and credits.",
             });
           }
@@ -219,17 +240,31 @@ export const useAppStore = create<AppState>((set, get) => ({
             isStreaming: false,
             streamingContent: "",
             toolActivity: null,
+            pendingTrace: null,
             error: errorMsg,
           });
         },
         {
           useTools,
           searchEngine,
+          googleApiKey: searchEngine === "google" ? googleApiKey : undefined,
+          googleCx: searchEngine === "google" ? googleCx : undefined,
           onThinking: (text) => {
             set({ toolActivity: `Thinking: ${text}` });
           },
           onTool: (text) => {
             set({ toolActivity: text });
+          },
+          onObservation: (text) => {
+            set({ toolActivity: text });
+          },
+          onTrace: (traceJson) => {
+            try {
+              const trace = JSON.parse(traceJson) as ReasoningTrace;
+              set({ pendingTrace: trace });
+            } catch {
+              // ignore malformed trace
+            }
           },
         }
       );

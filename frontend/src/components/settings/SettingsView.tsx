@@ -15,10 +15,21 @@ import {
   Wrench,
   Globe,
   Search,
+  ExternalLink,
 } from "lucide-react";
 
 export function SettingsView() {
-  const { providers, useTools, searchEngine, setUseTools, setSearchEngine } = useAppStore();
+  const {
+    providers,
+    useTools,
+    searchEngine,
+    googleApiKey,
+    googleCx,
+    setUseTools,
+    setSearchEngine,
+    setGoogleApiKey,
+    setGoogleCx,
+  } = useAppStore();
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [formProvider, setFormProvider] = useState("");
   const [formKey, setFormKey] = useState("");
@@ -30,6 +41,8 @@ export function SettingsView() {
     message: string;
   } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showGoogleKey, setShowGoogleKey] = useState(false);
+  const [googleSaved, setGoogleSaved] = useState(false);
 
   useEffect(() => {
     loadKeys();
@@ -92,6 +105,11 @@ export function SettingsView() {
   const handleDelete = async (provider: string) => {
     await api.deleteApiKey(provider);
     await loadKeys();
+  };
+
+  const handleSaveGoogle = () => {
+    setGoogleSaved(true);
+    setTimeout(() => setGoogleSaved(false), 3000);
   };
 
   return (
@@ -223,39 +241,146 @@ export function SettingsView() {
             </div>
 
             {useTools && (
-              <div>
-                <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                  <Search size={16} />
-                  Search Engine
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSearchEngine("duckduckgo")}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
-                      searchEngine === "duckduckgo"
-                        ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
-                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
-                    }`}
-                  >
-                    🦆 DuckDuckGo
-                  </button>
-                  <button
-                    onClick={() => setSearchEngine("google")}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
-                      searchEngine === "google"
-                        ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
-                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
-                    }`}
-                  >
-                    🔍 Google
-                  </button>
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                    <Search size={16} />
+                    Search Engine
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSearchEngine("duckduckgo")}
+                      className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                        searchEngine === "duckduckgo"
+                          ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
+                          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
+                      }`}
+                    >
+                      DuckDuckGo
+                    </button>
+                    <button
+                      onClick={() => setSearchEngine("google")}
+                      className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                        searchEngine === "google"
+                          ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
+                          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
+                      }`}
+                    >
+                      Google
+                    </button>
+                  </div>
                 </div>
+
                 {searchEngine === "google" && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                    Google requires a Custom Search API key and CX ID configured server-side. Falls back to DuckDuckGo if not set.
-                  </p>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      Google Custom Search Setup
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Enter your Google Custom Search API key and Search Engine ID (CX).
+                      Without these, web search falls back to DuckDuckGo.
+                    </p>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                        API Key
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showGoogleKey ? "text" : "password"}
+                          value={googleApiKey}
+                          onChange={(e) => setGoogleApiKey(e.target.value)}
+                          placeholder="AIza..."
+                          className="input-field text-sm pr-10"
+                        />
+                        <button
+                          onClick={() => setShowGoogleKey(!showGoogleKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showGoogleKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                        Search Engine ID (CX)
+                      </label>
+                      <input
+                        type="text"
+                        value={googleCx}
+                        onChange={(e) => setGoogleCx(e.target.value)}
+                        placeholder="e.g. a1b2c3d4e5f6g7h8i"
+                        className="input-field text-sm"
+                      />
+                    </div>
+
+                    {googleSaved && (
+                      <div className="p-2 rounded-lg flex items-center gap-2 text-xs bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
+                        <CheckCircle2 size={14} className="flex-shrink-0" />
+                        Google credentials saved!
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleSaveGoogle}
+                      disabled={!googleApiKey.trim() || !googleCx.trim()}
+                      className="btn-primary text-sm flex items-center gap-2"
+                    >
+                      <Save size={14} />
+                      Save Google Credentials
+                    </button>
+
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                        How to get these credentials:
+                      </p>
+                      <ol className="text-xs text-gray-500 dark:text-gray-400 space-y-1.5 list-decimal list-inside">
+                        <li>
+                          Go to{" "}
+                          <a
+                            href="https://console.cloud.google.com/apis/credentials"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-500 hover:underline inline-flex items-center gap-0.5"
+                          >
+                            Google Cloud Console <ExternalLink size={10} />
+                          </a>
+                        </li>
+                        <li>Create a project (or select existing)</li>
+                        <li>
+                          Enable the{" "}
+                          <a
+                            href="https://console.cloud.google.com/apis/library/customsearch.googleapis.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-500 hover:underline inline-flex items-center gap-0.5"
+                          >
+                            Custom Search API <ExternalLink size={10} />
+                          </a>
+                        </li>
+                        <li>Go to Credentials and create an API Key</li>
+                        <li>
+                          Go to{" "}
+                          <a
+                            href="https://programmablesearchengine.google.com/controlpanel/all"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-500 hover:underline inline-flex items-center gap-0.5"
+                          >
+                            Programmable Search Engine <ExternalLink size={10} />
+                          </a>
+                        </li>
+                        <li>Create a search engine, enable "Search the entire web"</li>
+                        <li>Copy the Search Engine ID (CX) from the overview page</li>
+                      </ol>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                        Free tier: 100 queries/day. $5 per 1,000 queries after that.
+                      </p>
+                    </div>
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

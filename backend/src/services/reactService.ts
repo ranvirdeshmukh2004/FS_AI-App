@@ -11,21 +11,16 @@ interface ChatMessage {
 
 /**
  * Stream a ReAct-powered chat through ai-services.
- * The ai-services ReAct agent handles:
- *  - Sending tool descriptions to the LLM
- *  - Parsing Thought/Action/Action Input from responses
- *  - Executing tools (web_search, wikipedia)
- *  - Feeding observations back to the LLM
- *  - Returning the final answer
+ * Forwards all event types: thinking, tool, observation, chunk, trace, done, error
  */
 export async function streamReactChat(
   provider: string,
   model: string,
   messages: ChatMessage[],
   searchEngine: string,
-  onThinking: (text: string) => void,
-  onTool: (text: string) => void,
-  onChunk: (text: string) => void,
+  googleApiKey: string | undefined,
+  googleCx: string | undefined,
+  onEvent: (event: { type: string; content: string }) => void,
   onDone: (fullText: string) => void,
   onError: (err: Error) => void
 ) {
@@ -53,6 +48,8 @@ export async function streamReactChat(
         model,
         messages,
         search_engine: searchEngine,
+        google_api_key: googleApiKey || null,
+        google_cx: googleCx || null,
         stream: true,
       }),
     });
@@ -90,24 +87,19 @@ export async function streamReactChat(
         try {
           const data = JSON.parse(dataStr);
 
-          switch (data.type) {
-            case "thinking":
-              onThinking(data.content);
-              break;
-            case "tool":
-              onTool(data.content);
-              break;
-            case "chunk":
-              fullText = data.content;
-              onChunk(data.content);
-              break;
-            case "done":
-              fullText = data.content;
-              break;
-            case "error":
-              onError(new Error(data.content));
-              return;
+          if (data.type === "error") {
+            onError(new Error(data.content));
+            return;
           }
+
+          if (data.type === "done") {
+            fullText = data.content;
+          } else if (data.type === "chunk") {
+            fullText = data.content;
+          }
+
+          // Forward all event types to the Express response
+          onEvent(data);
         } catch {
           // skip malformed SSE
         }

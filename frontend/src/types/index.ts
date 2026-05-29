@@ -9,6 +9,20 @@ export interface ChatSession {
   messages?: Message[];
 }
 
+export interface TraceStep {
+  type: "thought" | "action" | "observation" | "direct";
+  content?: string;
+  tool?: string;
+  input?: string;
+  duration?: number;
+}
+
+export interface ReasoningTrace {
+  steps: TraceStep[];
+  tool_calls: number;
+  total_time: number;
+}
+
 export interface Message {
   id: string;
   sessionId: string;
@@ -16,6 +30,7 @@ export interface Message {
   content: string;
   tokens?: number;
   createdAt: string;
+  trace?: ReasoningTrace;
 }
 
 export interface Provider {

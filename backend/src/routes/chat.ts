@@ -12,6 +12,8 @@ const chatSchema = z.object({
   message: z.string().min(1),
   useTools: z.boolean().optional().default(false),
   searchEngine: z.enum(["duckduckgo", "google"]).optional().default("duckduckgo"),
+  googleApiKey: z.string().optional(),
+  googleCx: z.string().optional(),
 });
 
 router.post("/", async (req, res) => {
@@ -21,7 +23,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { sessionId, message, useTools, searchEngine } = parsed.data;
+  const { sessionId, message, useTools, searchEngine, googleApiKey, googleCx } = parsed.data;
 
   let session;
   try {
@@ -62,14 +64,11 @@ router.post("/", async (req, res) => {
       session.model,
       messages,
       searchEngine,
-      (thinking) => {
-        res.write(`data: ${JSON.stringify({ type: "thinking", content: thinking })}\n\n`);
-      },
-      (tool) => {
-        res.write(`data: ${JSON.stringify({ type: "tool", content: tool })}\n\n`);
-      },
-      (chunk) => {
-        res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
+      googleApiKey,
+      googleCx,
+      (event) => {
+        // Forward all event types (thinking, tool, observation, chunk, trace) to client
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
       },
       async (fullText) => {
         try {
@@ -88,6 +87,7 @@ router.post("/", async (req, res) => {
     );
   } else {
     // Direct LLM call without tools
+    const startTime = Date.now();
     streamChat(
       session.provider,
       session.model,
@@ -101,6 +101,14 @@ router.post("/", async (req, res) => {
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
+        // Send trace even for non-tool calls (just timing)
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        const trace = JSON.stringify({
+          steps: [{ type: "direct", content: "Answered directly without tools", duration: parseFloat(totalTime) }],
+          tool_calls: 0,
+          total_time: parseFloat(totalTime),
+        });
+        res.write(`data: ${JSON.stringify({ type: "trace", content: trace })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
         res.end();
       },

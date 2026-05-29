@@ -17,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface StreamEvent {
-  type: "chunk" | "done" | "error" | "thinking" | "tool";
+  type: "chunk" | "done" | "error" | "thinking" | "tool" | "observation" | "trace";
   content: string;
 }
 
@@ -73,8 +73,12 @@ export const api = {
     options?: {
       useTools?: boolean;
       searchEngine?: string;
+      googleApiKey?: string;
+      googleCx?: string;
       onThinking?: (text: string) => void;
       onTool?: (text: string) => void;
+      onObservation?: (text: string) => void;
+      onTrace?: (traceJson: string) => void;
     }
   ): void {
     fetch(`${BASE}/api/chat`, {
@@ -85,6 +89,8 @@ export const api = {
         message,
         useTools: options?.useTools ?? false,
         searchEngine: options?.searchEngine ?? "duckduckgo",
+        googleApiKey: options?.googleApiKey || undefined,
+        googleCx: options?.googleCx || undefined,
       }),
     })
       .then((res) => {
@@ -131,6 +137,10 @@ export const api = {
                   options.onThinking(data.content);
                 } else if (data.type === "tool" && options?.onTool) {
                   options.onTool(data.content);
+                } else if (data.type === "observation" && options?.onObservation) {
+                  options.onObservation(data.content);
+                } else if (data.type === "trace" && options?.onTrace) {
+                  options.onTrace(data.content);
                 }
               } catch {
                 // skip malformed SSE
