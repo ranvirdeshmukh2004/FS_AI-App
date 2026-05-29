@@ -9,13 +9,16 @@ interface Props {
   message: Message;
 }
 
+function getStepIcon(type: string) {
+  switch (type) {
+    case "thought": return <Brain size={14} className="text-purple-500" />;
+    case "action": return <Search size={14} className="text-blue-500" />;
+    case "observation": return <BookOpen size={14} className="text-green-500" />;
+    default: return <Bot size={14} className="text-gray-400" />;
+  }
+}
+
 function TraceStepItem({ step, index }: { step: TraceStep; index: number }) {
-  const iconMap: Record<string, JSX.Element> = {
-    thought: <Brain size={14} className="text-purple-500" />,
-    action: <Search size={14} className="text-blue-500" />,
-    observation: <BookOpen size={14} className="text-green-500" />,
-    direct: <Bot size={14} className="text-gray-400" />,
-  };
 
   const labelMap: Record<string, string> = {
     thought: "Thought",
@@ -27,7 +30,7 @@ function TraceStepItem({ step, index }: { step: TraceStep; index: number }) {
   return (
     <div className="flex gap-2 items-start py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
       <span className="text-xs text-gray-400 w-5 text-right flex-shrink-0 pt-0.5">{index + 1}</span>
-      <span className="flex-shrink-0 pt-0.5">{iconMap[step.type] || iconMap.direct}</span>
+      <span className="flex-shrink-0 pt-0.5">{getStepIcon(step.type)}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
