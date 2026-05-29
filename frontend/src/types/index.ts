@@ -41,3 +41,5 @@ export interface ApiKeyInfo {
 export type Theme = "light" | "dark";
 
 export type View = "chat" | "settings";
+
+export type SearchEngine = "duckduckgo" | "google";

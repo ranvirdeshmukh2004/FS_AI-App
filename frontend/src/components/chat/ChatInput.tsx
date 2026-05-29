@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Wrench } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 
 export function ChatInput() {
@@ -7,6 +7,8 @@ export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useAppStore((s) => s.sendMessage);
   const isStreaming = useAppStore((s) => s.isStreaming);
+  const useTools = useAppStore((s) => s.useTools);
+  const searchEngine = useAppStore((s) => s.searchEngine);
 
   const handleSubmit = () => {
     const trimmed = input.trim();
@@ -33,6 +35,14 @@ export function ChatInput() {
 
   return (
     <div className="border-t border-gray-200 dark:border-gray-800 p-4">
+      {useTools && (
+        <div className="max-w-3xl mx-auto mb-2">
+          <span className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-2 py-1 rounded-full">
+            <Wrench size={12} />
+            Tools active &middot; {searchEngine === "google" ? "Google" : "DuckDuckGo"}
+          </span>
+        </div>
+      )}
       <div className="max-w-3xl mx-auto flex gap-2 items-end">
         <textarea
           ref={textareaRef}

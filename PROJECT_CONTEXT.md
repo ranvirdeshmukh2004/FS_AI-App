@@ -45,7 +45,7 @@ Full-stack AI chat platform where users enter their own API keys, select AI prov
 |---------|------|------|---------|
 | **frontend** | React + Vite + TypeScript + TailwindCSS | 3000 (dev) / 80 (prod) | Chat UI, settings, session sidebar |
 | **backend** | Node.js + Express + TypeScript + Prisma | 4000 | REST API, session/chat management, AI provider routing, streaming |
-| **ai-services** | Python + FastAPI | 8000 | Embeddings, vector search, memory/RAG, Qdrant communication |
+| **ai-services** | Python + FastAPI | 8000 | Embeddings, vector search, memory/RAG, Qdrant communication, ReAct agent |
 
 **Why this split:** Node.js handles HTTP routing, database operations, and SSE streaming efficiently. Python is the ecosystem standard for ML/AI libraries (embeddings, vector operations). Keeping them separate allows independent scaling and deployment.
 
@@ -106,9 +106,10 @@ FS_AI-App/
 │
 ├── ai-services/               # Python + FastAPI
 │   ├── app/
-│   │   ├── api/routes/        # memory.py (embed + search endpoints)
+│   │   ├── api/routes/        # memory.py, react.py (ReAct agent endpoint)
 │   │   ├── config/            # Pydantic settings
-│   │   ├── services/          # embedding_service, vector_service
+│   │   ├── services/          # embedding_service, vector_service, react_agent
+│   │   │   └── tools/         # web_search.py, wikipedia.py
 │   │   ├── models/            # Pydantic schemas
 │   │   └── main.py            # FastAPI entry point
 │   ├── Dockerfile
@@ -193,7 +194,7 @@ FS_AI-App/
 | POST | /api/sessions | Create new session |
 | PATCH | /api/sessions/:id/title | Update session title |
 | DELETE | /api/sessions/:id | Delete session and messages |
-| POST | /api/chat | Send message, receive SSE stream |
+| POST | /api/chat | Send message, receive SSE stream (supports useTools + searchEngine params) |
 | GET | /api/providers | List available providers and models |
 | GET | /api/keys | List configured API keys (masked) |
 | POST | /api/keys | Add/update an API key |
@@ -206,6 +207,7 @@ FS_AI-App/
 | GET | /api/health | Health check (includes Qdrant status) |
 | POST | /api/memory/embed | Generate embedding and store in Qdrant |
 | POST | /api/memory/search | Semantic search across stored embeddings |
+| POST | /api/react/chat | ReAct agent endpoint (tool-augmented chat with streaming SSE) |
 
 ---
 
@@ -425,12 +427,49 @@ aws ssm start-session --target i-<instance-id>       # Connect to EC2
 - [x] Nginx reverse proxy config
 - [x] Deployment scripts (SSM-based)
 - [x] PROJECT_CONTEXT.md created
-- [ ] Install dependencies and verify local dev
-- [ ] Test full Docker Compose stack
-- [ ] Deploy to AWS
+- [x] Deployed to AWS (EC2 + Docker Postgres + Qdrant)
+- [x] Chat streaming working (SSE with callback pattern)
+- [x] ReAct framework with web search (DuckDuckGo/Google) + Wikipedia tools
+- [x] Search engine toggle in Settings UI
 - [ ] Configure domain + SSL
 - [ ] Add RAG context injection into chat flow
 - [ ] Add usage/token tracking
+
+---
+
+## ReAct Framework
+
+The app includes a ReAct (Reasoning + Acting) agent that gives LLMs access to external tools.
+
+### How it works
+1. When "Tools" is enabled in Settings, chat requests go through the ReAct agent instead of direct LLM calls
+2. The agent adds a system prompt telling the LLM about available tools and the Thought/Action/Action Input format
+3. If the LLM decides to use a tool, it emits `Action: tool_name` and `Action Input: query`
+4. The agent parses this, executes the tool, and feeds the result back as an `Observation`
+5. The LLM can use multiple tools (up to 6 steps) before giving a `Final Answer`
+6. For simple questions, the LLM responds directly without using tools
+
+### Available Tools
+- **web_search** — Search the web via DuckDuckGo (default) or Google Custom Search API
+- **wikipedia** — Search Wikipedia for encyclopedic information
+
+### Request Flow
+```
+Frontend → Backend /api/chat {useTools:true, searchEngine:"duckduckgo"}
+  → Backend calls ai-services /api/react/chat with provider credentials
+    → ReAct agent calls LLM, parses tool calls, executes tools
+    → Streams SSE events: thinking → tool → chunk → done
+  → Backend forwards SSE to frontend
+```
+
+### SSE Event Types
+| Type | Description |
+|------|-------------|
+| thinking | Agent's reasoning (Thought lines) |
+| tool | Tool being called (e.g., "Searching web_search: query") |
+| chunk | Final answer content |
+| done | Complete final answer |
+| error | Error message |
 
 ---
 
@@ -441,3 +480,4 @@ aws ssm start-session --target i-<instance-id>       # Connect to EC2
 3. **Session auto-titling** — Use the AI to generate a better title after the first exchange
 4. **Export/import** — Export chat sessions as JSON or Markdown
 5. **S3 + CloudFront frontend** — Alternative to Docker-served frontend for better caching and CDN
+6. **Google Custom Search API** — Server-side configuration for Google search in ReAct tools

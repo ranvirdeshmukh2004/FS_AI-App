@@ -4,10 +4,10 @@ import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
 import { ChatInput } from "./ChatInput";
 import { ModelSelector } from "../common/ModelSelector";
-import { MessageSquarePlus, X, AlertTriangle } from "lucide-react";
+import { MessageSquarePlus, X, AlertTriangle, Globe, Search } from "lucide-react";
 
 export function ChatView() {
-  const { messages, isStreaming, streamingContent, activeSessionId, error, clearError } =
+  const { messages, isStreaming, streamingContent, activeSessionId, error, clearError, toolActivity } =
     useAppStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -60,11 +60,18 @@ export function ChatView() {
                 <div className="w-3 h-3 rounded-full bg-primary-500 animate-pulse" />
               </div>
               <div className="rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
+                {toolActivity ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                    <Search size={14} className="animate-pulse text-primary-500" />
+                    <span>{toolActivity}</span>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                )}
               </div>
             </div>
           )}

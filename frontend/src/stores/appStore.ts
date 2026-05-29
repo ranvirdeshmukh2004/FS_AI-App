@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatSession, Message, Provider, Theme, View } from "@/types";
+import type { ChatSession, Message, Provider, SearchEngine, Theme, View } from "@/types";
 import { api } from "@/services/api";
 
 function generateId(): string {
@@ -19,6 +19,9 @@ interface AppState {
   streamingContent: string;
   sidebarOpen: boolean;
   error: string | null;
+  useTools: boolean;
+  searchEngine: SearchEngine;
+  toolActivity: string | null; // shows "Searching web_search: ..." while tools run
 
   toggleTheme: () => void;
   setView: (view: View) => void;
@@ -34,6 +37,9 @@ interface AppState {
   loadProviders: () => void;
   setProvider: (provider: string) => void;
   setModel: (model: string) => void;
+
+  setUseTools: (enabled: boolean) => void;
+  setSearchEngine: (engine: SearchEngine) => void;
 
   sendMessage: (content: string) => void;
 }
@@ -51,6 +57,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   streamingContent: "",
   sidebarOpen: true,
   error: null,
+  useTools: true,
+  searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
+  toolActivity: null,
 
   toggleTheme: () => {
     const newTheme = get().theme === "dark" ? "light" : "dark";
@@ -133,6 +142,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setModel: (model) => set({ selectedModel: model }),
 
+  setUseTools: (enabled) => set({ useTools: enabled }),
+  setSearchEngine: (engine) => {
+    localStorage.setItem("searchEngine", engine);
+    set({ searchEngine: engine });
+  },
+
   sendMessage: (content) => {
     const state = get();
 
@@ -149,10 +164,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: new Date().toISOString(),
       };
 
+      const { useTools, searchEngine } = get();
+
       set((s) => ({
         messages: [...s.messages, userMessage],
         isStreaming: true,
         streamingContent: "",
+        toolActivity: null,
       }));
 
       let fullContent = "";
@@ -162,7 +180,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         content,
         (chunk) => {
           fullContent += chunk;
-          set({ streamingContent: fullContent });
+          set({ streamingContent: fullContent, toolActivity: null });
         },
         (doneText) => {
           const finalContent = doneText || fullContent;
@@ -178,11 +196,13 @@ export const useAppStore = create<AppState>((set, get) => ({
               messages: [...s.messages, assistantMessage],
               isStreaming: false,
               streamingContent: "",
+              toolActivity: null,
             }));
           } else {
             set({
               isStreaming: false,
               streamingContent: "",
+              toolActivity: null,
               error: "No response received from AI. Check your API key and credits.",
             });
           }
@@ -198,8 +218,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           set({
             isStreaming: false,
             streamingContent: "",
+            toolActivity: null,
             error: errorMsg,
           });
+        },
+        {
+          useTools,
+          searchEngine,
+          onThinking: (text) => {
+            set({ toolActivity: `Thinking: ${text}` });
+          },
+          onTool: (text) => {
+            set({ toolActivity: text });
+          },
         }
       );
     };

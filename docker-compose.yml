@@ -13,8 +13,11 @@ services:
       - "4000:4000"
     env_file:
       - ./backend/.env
+    environment:
+      AI_SERVICES_URL: http://ai-services:8000
     depends_on:
       - postgres
+      - ai-services
     restart: unless-stopped
 
   ai-services:

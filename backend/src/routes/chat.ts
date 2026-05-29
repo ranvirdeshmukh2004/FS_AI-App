@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import * as sessionService from "../services/sessionService.js";
 import { streamChat } from "../services/chatService.js";
+import { streamReactChat } from "../services/reactService.js";
 import { logger } from "../utils/logger.js";
 
 const router = Router();
@@ -9,6 +10,8 @@ const router = Router();
 const chatSchema = z.object({
   sessionId: z.string().uuid(),
   message: z.string().min(1),
+  useTools: z.boolean().optional().default(false),
+  searchEngine: z.enum(["duckduckgo", "google"]).optional().default("duckduckgo"),
 });
 
 router.post("/", async (req, res) => {
@@ -18,7 +21,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { sessionId, message } = parsed.data;
+  const { sessionId, message, useTools, searchEngine } = parsed.data;
 
   let session;
   try {
@@ -52,28 +55,62 @@ router.post("/", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
-  streamChat(
-    session.provider,
-    session.model,
-    messages,
-    (chunk) => {
-      res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
-    },
-    async (fullText) => {
-      try {
-        await sessionService.addMessage(sessionId, "assistant", fullText);
-      } catch (err) {
-        logger.error({ err }, "Database error saving assistant message");
+  if (useTools) {
+    // Use ReAct agent with tool access
+    streamReactChat(
+      session.provider,
+      session.model,
+      messages,
+      searchEngine,
+      (thinking) => {
+        res.write(`data: ${JSON.stringify({ type: "thinking", content: thinking })}\n\n`);
+      },
+      (tool) => {
+        res.write(`data: ${JSON.stringify({ type: "tool", content: tool })}\n\n`);
+      },
+      (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
+      },
+      async (fullText) => {
+        try {
+          await sessionService.addMessage(sessionId, "assistant", fullText);
+        } catch (err) {
+          logger.error({ err }, "Database error saving assistant message");
+        }
+        res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
+        res.end();
+      },
+      (err) => {
+        logger.error({ err }, "ReAct stream error");
+        res.write(`data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`);
+        res.end();
       }
-      res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
-      res.end();
-    },
-    (err) => {
-      logger.error({ err }, "Chat stream error");
-      res.write(`data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`);
-      res.end();
-    }
-  );
+    );
+  } else {
+    // Direct LLM call without tools
+    streamChat(
+      session.provider,
+      session.model,
+      messages,
+      (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
+      },
+      async (fullText) => {
+        try {
+          await sessionService.addMessage(sessionId, "assistant", fullText);
+        } catch (err) {
+          logger.error({ err }, "Database error saving assistant message");
+        }
+        res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
+        res.end();
+      },
+      (err) => {
+        logger.error({ err }, "Chat stream error");
+        res.write(`data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`);
+        res.end();
+      }
+    );
+  }
 });
 
 export default router;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { api } from "@/services/api";
-import type { ApiKeyInfo } from "@/types";
+import type { ApiKeyInfo, SearchEngine } from "@/types";
 import {
   Key,
   Trash2,
@@ -12,10 +12,13 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Wrench,
+  Globe,
+  Search,
 } from "lucide-react";
 
 export function SettingsView() {
-  const { providers } = useAppStore();
+  const { providers, useTools, searchEngine, setUseTools, setSearchEngine } = useAppStore();
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [formProvider, setFormProvider] = useState("");
   const [formKey, setFormKey] = useState("");
@@ -185,6 +188,75 @@ export function SettingsView() {
                 {saving ? "Saving..." : "Save Key"}
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 border border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Wrench size={18} />
+            ReAct Tools
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            When enabled, the AI can use web search and Wikipedia to find information it doesn't have in its training data.
+          </p>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe size={16} />
+                <span className="text-sm font-medium">Enable Tools</span>
+              </div>
+              <button
+                onClick={() => setUseTools(!useTools)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  useTools
+                    ? "bg-primary-500"
+                    : "bg-gray-300 dark:bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    useTools ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {useTools && (
+              <div>
+                <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <Search size={16} />
+                  Search Engine
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSearchEngine("duckduckgo")}
+                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                      searchEngine === "duckduckgo"
+                        ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
+                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
+                    }`}
+                  >
+                    🦆 DuckDuckGo
+                  </button>
+                  <button
+                    onClick={() => setSearchEngine("google")}
+                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                      searchEngine === "google"
+                        ? "bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300"
+                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750"
+                    }`}
+                  >
+                    🔍 Google
+                  </button>
+                </div>
+                {searchEngine === "google" && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    Google requires a Custom Search API key and CX ID configured server-side. Falls back to DuckDuckGo if not set.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

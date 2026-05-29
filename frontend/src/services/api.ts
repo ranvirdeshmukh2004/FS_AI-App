@@ -17,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface StreamEvent {
-  type: "chunk" | "done" | "error";
+  type: "chunk" | "done" | "error" | "thinking" | "tool";
   content: string;
 }
 
@@ -69,12 +69,23 @@ export const api = {
     message: string,
     onChunk: (text: string) => void,
     onDone: (fullText: string) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    options?: {
+      useTools?: boolean;
+      searchEngine?: string;
+      onThinking?: (text: string) => void;
+      onTool?: (text: string) => void;
+    }
   ): void {
     fetch(`${BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify({
+        sessionId,
+        message,
+        useTools: options?.useTools ?? false,
+        searchEngine: options?.searchEngine ?? "duckduckgo",
+      }),
     })
       .then((res) => {
         if (!res.ok) {
@@ -116,6 +127,10 @@ export const api = {
                 } else if (data.type === "error") {
                   onError(data.content);
                   return;
+                } else if (data.type === "thinking" && options?.onThinking) {
+                  options.onThinking(data.content);
+                } else if (data.type === "tool" && options?.onTool) {
+                  options.onTool(data.content);
                 }
               } catch {
                 // skip malformed SSE

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.memory import router as memory_router
+from app.api.routes.react import router as react_router
 from app.models.schemas import HealthResponse
 from app.services.vector_service import check_connection
 
@@ -15,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(memory_router, prefix="/api")
+app.include_router(react_router, prefix="/api")
 
 
 @app.get("/api/health", response_model=HealthResponse)
