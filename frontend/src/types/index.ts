@@ -10,7 +10,7 @@ export interface ChatSession {
 }
 
 export interface TraceStep {
-  type: "thought" | "action" | "observation" | "direct";
+  type: "thought" | "action" | "observation" | "direct" | "router";
   content?: string;
   tool?: string;
   input?: string;

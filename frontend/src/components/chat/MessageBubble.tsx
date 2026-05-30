@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { Message, TraceStep } from "@/types";
-import { User, Bot, Clock, Wrench, ChevronDown, ChevronRight, Brain, Search, BookOpen, Zap, Database } from "lucide-react";
+import { User, Bot, Clock, Wrench, ChevronDown, ChevronRight, Brain, Search, BookOpen, Zap, Database, Route } from "lucide-react";
 
 interface Props {
   message: Message;
@@ -11,6 +11,7 @@ interface Props {
 
 function getStepIcon(type: string) {
   switch (type) {
+    case "router": return <Route size={14} className="text-amber-500" />;
     case "thought": return <Brain size={14} className="text-purple-500" />;
     case "action": return <Search size={14} className="text-blue-500" />;
     case "observation": return <BookOpen size={14} className="text-green-500" />;
@@ -20,6 +21,7 @@ function getStepIcon(type: string) {
 
 function TraceStepItem({ step, index }: { step: TraceStep; index: number }) {
   const labelMap: Record<string, string> = {
+    router: "Router",
     thought: "Thought",
     action: "Action",
     observation: "Observation",

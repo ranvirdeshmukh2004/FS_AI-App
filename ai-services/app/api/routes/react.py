@@ -1,8 +1,10 @@
 """
-ReAct Agent API Routes
+Orchestrated ReAct Agent API Route
 
-Provides endpoints for the backend to call the ReAct agent
-with tool-augmented reasoning.
+Routes queries through the orchestrator which classifies and dispatches:
+  - DIRECT: Simple queries → LLM only
+  - SINGLE: One-tool queries → direct tool call + synthesis
+  - REACT:  Complex queries → full multi-step reasoning loop
 """
 
 import json
@@ -12,7 +14,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.services.react_agent import run_react_agent_stream
+from app.services.orchestrator import run_orchestrator_stream
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +27,12 @@ class ChatMessage(BaseModel):
 
 
 class ReactRequest(BaseModel):
-    """Request body for ReAct agent calls."""
+    """Request body for orchestrated agent calls."""
     provider_base_url: str
     api_key: str
     model: str
     messages: list[ChatMessage]
-    search_engine: str = "duckduckgo"  # "duckduckgo" or "google"
+    search_engine: str = "duckduckgo"
     google_api_key: str | None = None
     google_cx: str | None = None
     stream: bool = True
@@ -39,13 +41,13 @@ class ReactRequest(BaseModel):
 @router.post("/chat")
 async def react_chat(req: ReactRequest):
     """
-    Run a ReAct agent conversation with streaming SSE.
-    Returns event types: thinking, tool, observation, chunk, trace, done, error
+    Orchestrated agent conversation with streaming SSE.
+    The orchestrator classifies the query and routes to the optimal path.
     """
     conversation = [{"role": m.role, "content": m.content} for m in req.messages]
 
     return StreamingResponse(
-        _stream_react(req, conversation),
+        _stream_orchestrated(req, conversation),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -55,10 +57,10 @@ async def react_chat(req: ReactRequest):
     )
 
 
-async def _stream_react(req: ReactRequest, conversation: list[dict]):
-    """Generator that yields SSE events from the ReAct agent."""
+async def _stream_orchestrated(req: ReactRequest, conversation: list[dict]):
+    """Generator that yields SSE events from the orchestrator."""
     try:
-        async for event in run_react_agent_stream(
+        async for event in run_orchestrator_stream(
             base_url=req.provider_base_url,
             api_key=req.api_key,
             model=req.model,
@@ -69,5 +71,5 @@ async def _stream_react(req: ReactRequest, conversation: list[dict]):
         ):
             yield f"data: {json.dumps(event)}\n\n"
     except Exception as e:
-        logger.error("ReAct stream error: %s", e)
+        logger.error("Orchestrator stream error: %s", e)
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
