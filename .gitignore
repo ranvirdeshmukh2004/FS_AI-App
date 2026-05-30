@@ -16,3 +16,4 @@ venv/
 coverage/
 .turbo/
 prisma/*.db
+/instances
