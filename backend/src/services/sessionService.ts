@@ -53,7 +53,13 @@ export async function addMessage(
   metadata?: Record<string, unknown>
 ) {
   const message = await prisma.message.create({
-    data: { sessionId, role, content, tokens, metadata: metadata ?? undefined },
+    data: {
+      sessionId,
+      role,
+      content,
+      tokens,
+      metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : undefined,
+    },
   });
 
   await prisma.chatSession.update({
