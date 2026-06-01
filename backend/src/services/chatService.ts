@@ -1,5 +1,6 @@
 import { getProviderConfig } from "../config/providers.js";
 import { getDecryptedKey } from "./apiKeyService.js";
+import * as endpointService from "./customEndpointService.js";
 import { logger } from "../utils/logger.js";
 
 interface ChatMessage {
@@ -13,6 +14,42 @@ interface UsageInfo {
   total_tokens?: number;
 }
 
+/**
+ * Resolve provider + model to (baseUrl, apiKey, actualModel).
+ * Handles self-hosted custom endpoints (model IDs like "custom:<uuid>").
+ */
+async function resolveEndpoint(
+  provider: string,
+  model: string
+): Promise<{ baseUrl: string; apiKey: string; model: string; isAnthropic: boolean } | null> {
+  // Self-hosted custom endpoint
+  if (provider === "self-hosted" && model.startsWith("custom:")) {
+    const endpointId = model.slice(7); // remove "custom:" prefix
+    const endpoint = await endpointService.getEndpoint(endpointId);
+    if (!endpoint) return null;
+    return {
+      baseUrl: endpoint.baseUrl.replace(/\/+$/, ""),
+      apiKey: endpoint.apiKey || "",
+      model: endpoint.modelId,
+      isAnthropic: false,
+    };
+  }
+
+  // Built-in provider
+  const config = getProviderConfig(provider);
+  if (!config) return null;
+
+  const apiKey = await getDecryptedKey(provider);
+  if (!apiKey) return null;
+
+  return {
+    baseUrl: config.baseUrl,
+    apiKey,
+    model,
+    isAnthropic: provider === "anthropic",
+  };
+}
+
 export async function streamChat(
   provider: string,
   model: string,
@@ -21,31 +58,46 @@ export async function streamChat(
   onDone: (fullText: string, usage: UsageInfo) => void,
   onError: (err: Error) => void
 ) {
-  const providerConfig = getProviderConfig(provider);
-  if (!providerConfig) {
-    onError(new Error(`Unknown provider: ${provider}`));
+  const resolved = await resolveEndpoint(provider, model);
+  if (!resolved) {
+    onError(new Error(
+      provider === "self-hosted"
+        ? "Self-hosted endpoint not found or inactive"
+        : `No API key configured for ${provider}`
+    ));
     return;
   }
 
-  const apiKey = await getDecryptedKey(provider);
-  if (!apiKey) {
-    onError(new Error(`No API key configured for ${provider}`));
-    return;
+  if (resolved.isAnthropic) {
+    return streamChatAnthropic(resolved.baseUrl, resolved.apiKey, resolved.model, messages, onChunk, onDone, onError);
   }
 
-  if (provider === "anthropic") {
-    return streamChatAnthropic(providerConfig.baseUrl, apiKey, model, messages, onChunk, onDone, onError);
-  }
+  return streamChatOpenAI(resolved.baseUrl, resolved.apiKey, resolved.model, messages, onChunk, onDone, onError);
+}
 
-  const url = `${providerConfig.baseUrl}/chat/completions`;
+/**
+ * Also export resolveEndpoint for use by reactService
+ */
+export { resolveEndpoint };
+
+async function streamChatOpenAI(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  messages: ChatMessage[],
+  onChunk: (text: string) => void,
+  onDone: (fullText: string, usage: UsageInfo) => void,
+  onError: (err: Error) => void
+) {
+  const url = `${baseUrl}/chat/completions`;
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         messages,
@@ -132,9 +184,7 @@ async function streamChatAnthropic(
       max_tokens: 1024,
       stream: true,
     };
-    if (systemMsg) {
-      body.system = systemMsg.content;
-    }
+    if (systemMsg) body.system = systemMsg.content;
 
     const response = await fetch(url, {
       method: "POST",

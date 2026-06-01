@@ -64,6 +64,31 @@ export const api = {
       body: JSON.stringify({ provider, key }),
     }),
 
+  // Custom self-hosted endpoints
+  getCustomEndpoints: () =>
+    request<import("@/types").CustomEndpoint[]>("/api/custom-endpoints"),
+
+  createCustomEndpoint: (data: {
+    name: string;
+    baseUrl: string;
+    apiKey?: string;
+    modelId: string;
+    modelName: string;
+  }) =>
+    request<import("@/types").CustomEndpoint>("/api/custom-endpoints", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  testCustomEndpoint: (baseUrl: string, apiKey?: string) =>
+    request<{ valid: boolean; message: string; models?: string[] }>(
+      "/api/custom-endpoints/test",
+      { method: "POST", body: JSON.stringify({ baseUrl, apiKey }) }
+    ),
+
+  deleteCustomEndpoint: (id: string) =>
+    request<void>(`/api/custom-endpoints/${id}`, { method: "DELETE" }),
+
   streamChat(
     sessionId: string,
     message: string,

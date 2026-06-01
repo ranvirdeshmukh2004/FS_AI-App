@@ -7,6 +7,7 @@ import sessionRoutes from "./routes/sessions.js";
 import chatRoutes from "./routes/chat.js";
 import apiKeyRoutes from "./routes/apiKeys.js";
 import providerRoutes from "./routes/providers.js";
+import customEndpointRoutes from "./routes/customEndpoints.js";
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use("/api/sessions", sessionRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/keys", apiKeyRoutes);
 app.use("/api/providers", providerRoutes);
+app.use("/api/custom-endpoints", customEndpointRoutes);
 
 app.use(errorHandler);
 

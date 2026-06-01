@@ -55,6 +55,20 @@ model ProviderModel {
   @@map("provider_models")
 }
 
+model CustomEndpoint {
+  id        String   @id @default(uuid())
+  name      String
+  baseUrl   String   @map("base_url")
+  apiKey    String?  @map("api_key")
+  modelId   String   @map("model_id")
+  modelName String   @map("model_name")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("custom_endpoints")
+}
+
 enum MessageRole {
   user
   assistant

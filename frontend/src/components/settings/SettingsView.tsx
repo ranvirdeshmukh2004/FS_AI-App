@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { api } from "@/services/api";
 import type { ApiKeyInfo } from "@/types";
+import type { CustomEndpoint } from "@/types";
 import {
   Key,
   Trash2,
@@ -16,6 +17,8 @@ import {
   Globe,
   Search,
   ExternalLink,
+  Server,
+  Plus,
 } from "lucide-react";
 
 export function SettingsView() {
@@ -44,8 +47,76 @@ export function SettingsView() {
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [googleSaved, setGoogleSaved] = useState(false);
 
+  // Custom endpoint state
+  const [endpoints, setEndpoints] = useState<CustomEndpoint[]>([]);
+  const [showEndpointForm, setShowEndpointForm] = useState(false);
+  const [epName, setEpName] = useState("");
+  const [epUrl, setEpUrl] = useState("");
+  const [epApiKey, setEpApiKey] = useState("");
+  const [epModelId, setEpModelId] = useState("");
+  const [epModelName, setEpModelName] = useState("");
+  const [epTesting, setEpTesting] = useState(false);
+  const [epTestResult, setEpTestResult] = useState<{ valid: boolean; message: string; models?: string[] } | null>(null);
+  const [epSaving, setEpSaving] = useState(false);
+  const loadProviders = useAppStore((s) => s.loadProviders);
+
+  const loadEndpoints = async () => {
+    try {
+      const data = await api.getCustomEndpoints();
+      setEndpoints(data);
+    } catch { /* ignore */ }
+  };
+
+  const handleTestEndpoint = async () => {
+    if (!epUrl.trim()) return;
+    setEpTesting(true);
+    setEpTestResult(null);
+    try {
+      const result = await api.testCustomEndpoint(epUrl.trim(), epApiKey.trim() || undefined);
+      setEpTestResult(result);
+      if (result.valid && result.models && result.models.length > 0 && !epModelId) {
+        setEpModelId(result.models[0]);
+        if (!epModelName) setEpModelName(result.models[0].split("/").pop() || result.models[0]);
+      }
+    } catch (err) {
+      setEpTestResult({ valid: false, message: err instanceof Error ? err.message : "Test failed" });
+    }
+    setEpTesting(false);
+  };
+
+  const handleSaveEndpoint = async () => {
+    if (!epName.trim() || !epUrl.trim() || !epModelId.trim() || !epModelName.trim()) return;
+    setEpSaving(true);
+    try {
+      await api.createCustomEndpoint({
+        name: epName.trim(),
+        baseUrl: epUrl.trim(),
+        apiKey: epApiKey.trim() || undefined,
+        modelId: epModelId.trim(),
+        modelName: epModelName.trim(),
+      });
+      setEpName(""); setEpUrl(""); setEpApiKey(""); setEpModelId(""); setEpModelName("");
+      setShowEndpointForm(false);
+      setEpTestResult(null);
+      await loadEndpoints();
+      loadProviders();
+    } catch (err) {
+      console.error("Failed to save endpoint:", err);
+    }
+    setEpSaving(false);
+  };
+
+  const handleDeleteEndpoint = async (id: string) => {
+    try {
+      await api.deleteCustomEndpoint(id);
+      await loadEndpoints();
+      loadProviders();
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadKeys();
+    loadEndpoints();
   }, []);
 
   useEffect(() => {
@@ -383,6 +454,88 @@ export function SettingsView() {
               </>
             )}
           </div>
+        </div>
+
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 border border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Server size={18} />
+            Self-Hosted Models
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Connect to LLMs running on your own EC2 instances (vLLM, text-generation-inference, Ollama, etc.).
+            They appear as the "Self-Hosted" provider in the model selector.
+          </p>
+
+          {endpoints.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {endpoints.map((ep) => (
+                <div key={ep.id} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg px-4 py-3 border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <span className="font-medium text-sm">{ep.name}</span>
+                    <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{ep.modelName}</span>
+                    <p className="text-xs text-gray-400 mt-0.5 font-mono">{ep.baseUrl}</p>
+                  </div>
+                  <button onClick={() => handleDeleteEndpoint(ep.id)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!showEndpointForm ? (
+            <button onClick={() => setShowEndpointForm(true)} className="btn-secondary text-sm flex items-center gap-2">
+              <Plus size={14} /> Add Endpoint
+            </button>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Endpoint Name</label>
+                <input type="text" value={epName} onChange={(e) => setEpName(e.target.value)} placeholder="e.g. My Llama 4 Scout" className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Base URL (OpenAI-compatible API)</label>
+                <input type="text" value={epUrl} onChange={(e) => setEpUrl(e.target.value)} placeholder="http://your-ec2-ip:8000/v1" className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">API Key (optional)</label>
+                <input type="password" value={epApiKey} onChange={(e) => setEpApiKey(e.target.value)} placeholder="Leave empty if no auth" className="input-field text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Model ID</label>
+                  <input type="text" value={epModelId} onChange={(e) => setEpModelId(e.target.value)} placeholder="Auto-detected on test" className="input-field text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Display Name</label>
+                  <input type="text" value={epModelName} onChange={(e) => setEpModelName(e.target.value)} placeholder="e.g. Llama 4 Scout 4bit" className="input-field text-sm" />
+                </div>
+              </div>
+
+              {epTestResult && (
+                <div className={`p-2 rounded-lg flex items-center gap-2 text-xs ${
+                  epTestResult.valid
+                    ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+                    : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+                }`}>
+                  {epTestResult.valid ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+                  {epTestResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={handleTestEndpoint} disabled={!epUrl.trim() || epTesting} className="btn-secondary text-sm flex items-center gap-2">
+                  {epTesting ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
+                  {epTesting ? "Testing..." : "Test Connection"}
+                </button>
+                <button onClick={handleSaveEndpoint} disabled={!epName.trim() || !epUrl.trim() || !epModelId.trim() || !epModelName.trim() || epSaving} className="btn-primary text-sm flex items-center gap-2">
+                  {epSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  {epSaving ? "Saving..." : "Save Endpoint"}
+                </button>
+                <button onClick={() => { setShowEndpointForm(false); setEpTestResult(null); }} className="btn-secondary text-sm">Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
 
         <h3 className="font-semibold mb-4">Configured Keys</h3>

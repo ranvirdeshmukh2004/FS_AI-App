@@ -1,5 +1,4 @@
-import { getProviderConfig } from "../config/providers.js";
-import { getDecryptedKey } from "./apiKeyService.js";
+import { resolveEndpoint } from "./chatService.js";
 import { logger } from "../utils/logger.js";
 
 const AI_SERVICES_URL = process.env.AI_SERVICES_URL || "http://ai-services:8000";
@@ -11,7 +10,7 @@ interface ChatMessage {
 
 /**
  * Stream a ReAct-powered chat through ai-services.
- * Forwards all event types: thinking, tool, observation, chunk, trace, done, error
+ * Handles built-in providers AND self-hosted custom endpoints.
  */
 export async function streamReactChat(
   provider: string,
@@ -24,15 +23,13 @@ export async function streamReactChat(
   onDone: (fullText: string) => void,
   onError: (err: Error) => void
 ) {
-  const providerConfig = getProviderConfig(provider);
-  if (!providerConfig) {
-    onError(new Error(`Unknown provider: ${provider}`));
-    return;
-  }
-
-  const apiKey = await getDecryptedKey(provider);
-  if (!apiKey) {
-    onError(new Error(`No API key configured for ${provider}`));
+  const resolved = await resolveEndpoint(provider, model);
+  if (!resolved) {
+    onError(new Error(
+      provider === "self-hosted"
+        ? "Self-hosted endpoint not found or inactive"
+        : `No API key configured for ${provider}`
+    ));
     return;
   }
 
@@ -43,9 +40,9 @@ export async function streamReactChat(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        provider_base_url: providerConfig.baseUrl,
-        api_key: apiKey,
-        model,
+        provider_base_url: resolved.baseUrl,
+        api_key: resolved.apiKey,
+        model: resolved.model,
         messages,
         search_engine: searchEngine,
         google_api_key: googleApiKey || null,
@@ -98,7 +95,6 @@ export async function streamReactChat(
             fullText = data.content;
           }
 
-          // Forward all event types to the Express response
           onEvent(data);
         } catch {
           // skip malformed SSE

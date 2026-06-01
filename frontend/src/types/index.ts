@@ -57,6 +57,18 @@ export interface ApiKeyInfo {
   updatedAt: string;
 }
 
+export interface CustomEndpoint {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string | null;
+  modelId: string;
+  modelName: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type Theme = "light" | "dark";
 
 export type View = "chat" | "settings";
