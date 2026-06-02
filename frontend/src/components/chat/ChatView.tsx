@@ -5,6 +5,7 @@ import { StreamingBubble } from "./StreamingBubble";
 import { ChatInput } from "./ChatInput";
 import { ModelSelector } from "../common/ModelSelector";
 import { MessageSquarePlus, X, AlertTriangle, Search } from "lucide-react";
+import { PdfUploadButton } from "../pdf/PdfUpload";
 
 export function ChatView() {
   const { messages, isStreaming, streamingContent, activeSessionId, error, clearError, toolActivity } =
@@ -19,6 +20,7 @@ export function ChatView() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <ModelSelector />
+        <PdfUploadButton />
       </div>
 
       {error && (

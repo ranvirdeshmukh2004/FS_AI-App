@@ -3,6 +3,7 @@ import { useAppStore } from "@/stores/appStore";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { SettingsView } from "@/components/settings/SettingsView";
+import { PdfWorkspace } from "@/components/pdf/PdfWorkspace";
 import { PanelLeftOpen } from "lucide-react";
 
 export default function App() {
@@ -18,7 +19,7 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex min-w-0">
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
@@ -27,7 +28,10 @@ export default function App() {
             <PanelLeftOpen size={18} />
           </button>
         )}
-        {view === "chat" ? <ChatView /> : <SettingsView />}
+        <div className="flex-1 flex flex-col min-w-0">
+          {view === "chat" ? <ChatView /> : <SettingsView />}
+        </div>
+        {view === "chat" && <PdfWorkspace />}
       </main>
     </div>
   );
