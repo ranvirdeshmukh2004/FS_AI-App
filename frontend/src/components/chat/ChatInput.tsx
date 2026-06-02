@@ -80,10 +80,8 @@ export function ChatInput() {
 
       try {
         const result = await api.uploadPdf(file, sid, docId);
-        setUploadStatus(`${file.name}: ${result.chunks} chunks indexed from ${result.pages} pages`);
-
-        // Send a system-like message so the AI knows about the upload
-        sendMessage(`[I uploaded a PDF: "${file.name}" (${result.pages} pages, ${result.chunks} chunks indexed). Please use the doc_search tool when I ask questions about this document.]`);
+        setUploadStatus(`✓ ${file.name}: ${result.chunks} chunks indexed from ${result.pages} pages — ready to chat`);
+        // No auto-message sent. User asks questions when ready.
       } catch (err) {
         setUploadStatus(`Failed to process ${file.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
