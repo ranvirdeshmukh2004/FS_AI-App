@@ -1,8 +1,6 @@
 """
-Agent API Route — supports both Orchestrator and plain ReAct modes.
-
-Orchestrator mode (default): classifies query → DIRECT / SINGLE / REACT
-Plain ReAct mode: sends all tools to LLM, lets it decide what to use
+Agent API Route — supports Orchestrator and plain ReAct modes.
+Passes session_id for document search context.
 """
 
 import json
@@ -14,6 +12,7 @@ from pydantic import BaseModel
 
 from app.services.orchestrator import run_orchestrator_stream
 from app.services.react_agent import run_react_agent_stream
+from app.services.tools.doc_search import set_doc_search_context
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +33,18 @@ class ReactRequest(BaseModel):
     google_api_key: str | None = None
     google_cx: str | None = None
     use_orchestrator: bool = True
+    session_id: str | None = None
+    embedding_api_key: str | None = None
     stream: bool = True
 
 
 @router.post("/chat")
 async def react_chat(req: ReactRequest):
     conversation = [{"role": m.role, "content": m.content} for m in req.messages]
+
+    # Set document search context so the doc_search tool can access Qdrant
+    if req.session_id and req.embedding_api_key:
+        set_doc_search_context(req.session_id, req.embedding_api_key)
 
     if req.use_orchestrator:
         generator = _stream_orchestrated(req, conversation)

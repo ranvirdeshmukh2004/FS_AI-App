@@ -26,6 +26,15 @@ router.post("/", async (req, res) => {
 
   const { sessionId, message, useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = parsed.data;
 
+  // Get OpenAI/OpenRouter key for embeddings (doc_search needs it)
+  const embeddingApiKey = await (async () => {
+    try {
+      // Try openai first, then openrouter
+      const { getDecryptedKey } = await import("../services/apiKeyService.js");
+      return await getDecryptedKey("openai") || await getDecryptedKey("openrouter") || undefined;
+    } catch { return undefined; }
+  })();
+
   const dbStartFetch = Date.now();
   let session;
   try {
@@ -71,6 +80,8 @@ router.post("/", async (req, res) => {
       googleApiKey,
       googleCx,
       useOrchestrator,
+      sessionId,
+      embeddingApiKey,
       (event) => {
         if (event.type === "trace") {
           try {

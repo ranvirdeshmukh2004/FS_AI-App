@@ -89,6 +89,30 @@ export const api = {
   deleteCustomEndpoint: (id: string) =>
     request<void>(`/api/custom-endpoints/${id}`, { method: "DELETE" }),
 
+  // PDF upload
+  uploadPdf: async (file: File, sessionId: string, docId?: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("sessionId", sessionId);
+    if (docId) formData.append("docId", docId);
+    const res = await fetch(`${BASE}/api/pdf/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Upload failed: ${body}`);
+    }
+    return res.json() as Promise<{
+      doc_id: string;
+      filename: string;
+      pages: number;
+      chunks: number;
+      status: string;
+      message?: string;
+    }>;
+  },
+
   streamChat(
     sessionId: string,
     message: string,

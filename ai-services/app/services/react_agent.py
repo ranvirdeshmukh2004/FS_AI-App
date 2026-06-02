@@ -1,5 +1,5 @@
 """
-ReAct (Reasoning + Acting) Agent — 7 tools, Anthropic support, token tracking.
+ReAct (Reasoning + Acting) Agent — 8 tools, Anthropic support, token tracking.
 """
 
 import json
@@ -17,6 +17,7 @@ from app.services.tools.datetime_tool import datetime_tool
 from app.services.tools.weather import weather
 from app.services.tools.read_url import read_url
 from app.services.tools.python_executor import python_executor
+from app.services.tools.doc_search import doc_search
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,14 @@ TOOL_DESCRIPTIONS = """You have access to the following tools:
 7. python_executor — Execute Python code in a sandbox.
    Input: Python code.  Example: python_executor("import statistics; print(statistics.mean([10,20,30]))")
 
+8. doc_search — Search uploaded PDF documents for relevant information. ALWAYS use this when the user asks about uploaded documents, PDFs, or files. Returns passages with page numbers and filenames.
+   Input: A search query.  Example: doc_search("system architecture overview")
+
 RULES:
-- Only use tools when you need external info or computation.
-- For greetings, opinions, coding help, creative tasks — respond directly.
+- ALWAYS use doc_search when the user asks about uploaded documents/PDFs.
+- Only cite information that doc_search actually returns. Never invent page numbers.
+- If doc_search returns no results, say "I could not find supporting information for this in the uploaded document."
+- For general questions unrelated to documents, use other tools or respond directly.
 - Use calculator for math, datetime for time questions.
 - You can chain multiple tools."""
 
@@ -111,8 +117,10 @@ async def _execute_tool(action: str, action_input: str, search_engine: str = "du
         return await read_url(action_input)
     elif action in ("python_executor", "python", "code", "execute"):
         return await python_executor(action_input)
+    elif action in ("doc_search", "docsearch", "document_search", "pdf_search"):
+        return await doc_search(action_input)
     else:
-        return f"Unknown tool: {action}. Available: web_search, wikipedia, calculator, datetime, weather, read_url, python_executor"
+        return f"Unknown tool: {action}. Available: web_search, wikipedia, calculator, datetime, weather, read_url, python_executor, doc_search"
 
 
 async def _call_llm(base_url: str, api_key: str, model: str, messages: list[dict]) -> tuple[str, dict]:

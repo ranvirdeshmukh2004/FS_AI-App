@@ -20,6 +20,8 @@ export async function streamReactChat(
   googleApiKey: string | undefined,
   googleCx: string | undefined,
   useOrchestrator: boolean,
+  sessionId: string | undefined,
+  embeddingApiKey: string | undefined,
   onEvent: (event: { type: string; content: string }) => void,
   onDone: (fullText: string) => void,
   onError: (err: Error) => void
@@ -49,6 +51,8 @@ export async function streamReactChat(
         google_api_key: googleApiKey || null,
         google_cx: googleCx || null,
         use_orchestrator: useOrchestrator,
+        session_id: sessionId || null,
+        embedding_api_key: embeddingApiKey || null,
         stream: true,
       }),
     });

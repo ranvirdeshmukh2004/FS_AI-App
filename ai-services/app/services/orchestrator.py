@@ -24,6 +24,7 @@ from app.services.tools.datetime_tool import datetime_tool
 from app.services.tools.weather import weather
 from app.services.tools.read_url import read_url
 from app.services.tools.python_executor import python_executor
+from app.services.tools.doc_search import doc_search, set_doc_search_context
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,14 @@ TOOL_REGISTRY = {
                    "desc": "Current time, timezone conversion, date math"},
     "weather":    {"fn": weather, "domain": "info", "label": "Weather",
                    "desc": "Current weather for any city (free)"},
+    "doc_search": {"fn": doc_search, "domain": "research", "label": "Document Search",
+                   "desc": "Search uploaded PDF documents for relevant information. Use when user asks about uploaded files."},
 }
 
 # Aliases for flexible LLM tool naming
 TOOL_ALIASES = {
     "websearch": "web_search", "search": "web_search",
+    "docsearch": "doc_search", "document_search": "doc_search", "pdf_search": "doc_search",
     "wiki": "wikipedia",
     "readurl": "read_url", "url": "read_url", "fetch": "read_url",
     "calc": "calculator", "math": "calculator",
@@ -91,6 +95,15 @@ ROUTE_PATTERNS = {
     "python_executor": [
         r"\brun\b.*\bcode\b", r"\bexecute\b.*\bpython\b", r"\bscript\b",
         r"\bdata analysis\b", r"\bplot\b", r"\bpandas\b", r"\bnumpy\b",
+    ],
+    "doc_search": [
+        r"\b(?:the|this|uploaded|attached)\b.*\b(?:pdf|document|file|paper)\b",
+        r"\bpage\s*\d+", r"\bsummarize\b.*\b(?:document|pdf|file)\b",
+        r"\baccording to\b", r"\bfrom the\b.*\b(?:document|pdf|paper)\b",
+        r"\bwhat does\b.*\b(?:say|mention|describe)\b",
+        r"\bextract\b.*\bfrom\b", r"\bin the\b.*\b(?:report|paper|doc)\b",
+        r"\bcitation\b", r"\breference\b.*\bpage\b",
+        r"\barchitecture\b", r"\brequirements?\b", r"\bspecification\b",
     ],
 }
 
