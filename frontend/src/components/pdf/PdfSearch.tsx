@@ -6,16 +6,32 @@ import { pdfjs } from "react-pdf";
 export function PdfSearchBar() {
   const {
     searchOpen, searchQuery, searchResults, searchIndex,
-    setSearchQuery, setSearchResults, setSearchOpen, setSearchIndex,
+    setSearchQuery, setSearchResults, setSearchOpen,
     nextSearchResult, prevSearchResult, setCurrentPage, getActiveDoc,
   } = usePdfStore();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [searching, setSearching] = useState(false);
+  const pdfCacheRef = useRef<{ url: string; texts: string[] } | null>(null);
 
   useEffect(() => {
     if (searchOpen) inputRef.current?.focus();
   }, [searchOpen]);
+
+  // Pre-extract all page texts once (cached per doc URL)
+  const getPageTexts = useCallback(async (url: string): Promise<string[]> => {
+    if (pdfCacheRef.current?.url === url) return pdfCacheRef.current.texts;
+
+    const pdf = await pdfjs.getDocument(url).promise;
+    const texts: string[] = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      texts.push(tc.items.map((item: any) => item.str).join(" ").toLowerCase());
+    }
+    pdfCacheRef.current = { url, texts };
+    return texts;
+  }, []);
 
   const doSearch = useCallback(async (query: string) => {
     const doc = getActiveDoc();
@@ -25,45 +41,38 @@ export function PdfSearchBar() {
     }
 
     setSearching(true);
-    const results: { page: number; index: number }[] = [];
-
     try {
-      const pdf = await pdfjs.getDocument(doc.url).promise;
+      const texts = await getPageTexts(doc.url);
       const q = query.toLowerCase();
+      const results: { page: number; index: number }[] = [];
 
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const textContent = await page.getTextContent();
-        const text = textContent.items.map((item: any) => item.str).join(" ").toLowerCase();
-
-        let idx = 0;
-        let pos = text.indexOf(q, idx);
+      for (let p = 0; p < texts.length; p++) {
+        let pos = texts[p].indexOf(q);
         while (pos !== -1) {
-          results.push({ page: p, index: results.length });
-          pos = text.indexOf(q, pos + 1);
+          results.push({ page: p + 1, index: results.length });
+          pos = texts[p].indexOf(q, pos + 1);
         }
       }
 
       setSearchResults(results);
-      if (results.length > 0) {
-        setCurrentPage(results[0].page);
-      }
+      if (results.length > 0) setCurrentPage(results[0].page);
     } catch {
       setSearchResults([]);
     }
-
     setSearching(false);
-  }, [getActiveDoc, setSearchResults, setCurrentPage]);
+  }, [getActiveDoc, getPageTexts, setSearchResults, setCurrentPage]);
 
   // Debounced search
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
+    if (!searchQuery.trim()) { setSearchResults([]); return; }
     const timer = setTimeout(() => doSearch(searchQuery), 400);
     return () => clearTimeout(timer);
   }, [searchQuery, doSearch, setSearchResults]);
+
+  // Clear cache when doc changes
+  useEffect(() => {
+    pdfCacheRef.current = null;
+  }, [getActiveDoc()?.id]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
