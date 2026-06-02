@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Send, Loader2, Wrench, Paperclip, FileText, CheckCircle2 } from "lucide-react";
+import { Send, Loader2, Wrench, Paperclip, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { usePdfStore } from "@/stores/pdfStore";
 import { api } from "@/services/api";

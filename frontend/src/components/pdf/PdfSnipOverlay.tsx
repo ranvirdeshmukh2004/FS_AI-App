@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { usePdfStore } from "@/stores/pdfStore";
 import { useAppStore } from "@/stores/appStore";
 import { Send, Download, RotateCcw, X } from "lucide-react";

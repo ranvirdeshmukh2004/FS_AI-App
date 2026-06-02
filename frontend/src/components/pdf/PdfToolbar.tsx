@@ -2,7 +2,6 @@ import { usePdfStore } from "@/stores/pdfStore";
 import {
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight,
   Scissors, PanelRightClose, PanelLeft, Search,
-  Highlighter,
 } from "lucide-react";
 
 const HIGHLIGHT_COLORS = ["#fef08a", "#bbf7d0", "#bfdbfe", "#fecaca", "#e9d5ff"];

@@ -10,7 +10,7 @@ import { PdfSnipOverlay } from "./PdfSnipOverlay";
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export function PdfViewer() {
-  const { currentPage, scale, setCurrentPage, snipping, getActiveDoc } = usePdfStore();
+  const { currentPage, scale, snipping, getActiveDoc } = usePdfStore();
   const doc = getActiveDoc();
   const viewerRef = useRef<HTMLDivElement>(null);
   const [selectedText, setSelectedText] = useState("");
