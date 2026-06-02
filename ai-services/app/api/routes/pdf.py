@@ -1,8 +1,4 @@
-"""
-PDF Processing API Route
-
-Handles PDF upload, text extraction, chunking, embedding, and storage in Qdrant.
-"""
+"""PDF Processing API Route"""
 
 import logging
 import uuid
@@ -20,12 +16,10 @@ router = APIRouter(prefix="/pdf", tags=["pdf"])
 async def process_pdf_upload(
     file: UploadFile = File(...),
     session_id: str = Form(...),
-    embedding_api_key: str = Form(...),
+    embedding_api_key: str = Form(""),
     doc_id: str = Form(None),
 ):
-    """
-    Upload and process a PDF: extract text → chunk → embed → store in Qdrant.
-    """
+    """Upload and process a PDF. Works with or without an embedding API key."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
@@ -39,7 +33,7 @@ async def process_pdf_upload(
             filename=file.filename,
             session_id=session_id,
             doc_id=doc_id,
-            embedding_api_key=embedding_api_key,
+            embedding_api_key=embedding_api_key or None,
         )
         return result
     except Exception as e:

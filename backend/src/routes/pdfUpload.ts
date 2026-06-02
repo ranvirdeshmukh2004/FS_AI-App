@@ -5,14 +5,10 @@ import { logger } from "../utils/logger.js";
 
 const AI_SERVICES_URL = process.env.AI_SERVICES_URL || "http://ai-services:8000";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 const router = Router();
 
-/**
- * POST /api/pdf/upload
- * Upload a PDF, process it (extract → chunk → embed → Qdrant)
- */
 router.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
@@ -25,19 +21,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     return;
   }
 
-  // Get an API key for embeddings (try openai, then openrouter)
-  let embeddingKey: string | null = null;
+  // Try to get an embedding API key (optional — works without one)
+  let embeddingKey = "";
   try {
-    embeddingKey = await getDecryptedKey("openai") || await getDecryptedKey("openrouter");
-  } catch { /* ignore */ }
-
-  if (!embeddingKey) {
-    res.status(400).json({ error: "No OpenAI or OpenRouter API key configured. Needed for embeddings." });
-    return;
-  }
+    embeddingKey = await getDecryptedKey("openai") || await getDecryptedKey("openrouter") || "";
+  } catch { /* fine, works without */ }
 
   try {
-    // Forward to ai-services for processing
     const formData = new FormData();
     formData.append("file", new Blob([req.file.buffer], { type: "application/pdf" }), req.file.originalname);
     formData.append("session_id", sessionId);
