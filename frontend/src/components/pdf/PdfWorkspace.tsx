@@ -1,15 +1,34 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePdfStore } from "@/stores/pdfStore";
 import { PdfToolbar } from "./PdfToolbar";
 import { PdfDocTabs } from "./PdfDocTabs";
-import { PdfThumbnails } from "./PdfThumbnails";
+import { PdfSidebar } from "./PdfSidebar";
 import { PdfViewer } from "./PdfViewer";
 import { PdfUpload } from "./PdfUpload";
+import { PdfSearchBar } from "./PdfSearch";
 
 export function PdfWorkspace() {
-  const { workspaceOpen, workspaceWidth, setWorkspaceWidth, documents } = usePdfStore();
+  const { workspaceOpen, workspaceWidth, setWorkspaceWidth, documents, searchOpen, loadState, saveState } = usePdfStore();
   const [resizing, setResizing] = useState(false);
   const resizeRef = useRef<number>(0);
+
+  // Load persisted state on mount
+  useEffect(() => { loadState(); }, [loadState]);
+
+  // Save state when width changes
+  useEffect(() => { if (workspaceOpen) saveState(); }, [workspaceWidth, workspaceOpen, saveState]);
+
+  // Keyboard shortcut: Ctrl+F to search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f" && workspaceOpen && documents.length > 0) {
+        e.preventDefault();
+        usePdfStore.getState().setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [workspaceOpen, documents]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -57,8 +76,9 @@ export function PdfWorkspace() {
           <>
             <PdfDocTabs />
             <PdfToolbar />
+            {searchOpen && <PdfSearchBar />}
             <div className="flex flex-1 min-h-0 overflow-hidden">
-              <PdfThumbnails />
+              <PdfSidebar />
               <PdfViewer />
             </div>
           </>
