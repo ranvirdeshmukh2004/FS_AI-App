@@ -25,10 +25,12 @@ export function SettingsView() {
   const {
     providers,
     useTools,
+    useOrchestrator,
     searchEngine,
     googleApiKey,
     googleCx,
     setUseTools,
+    setUseOrchestrator,
     setSearchEngine,
     setGoogleApiKey,
     setGoogleCx,
@@ -313,6 +315,33 @@ export function SettingsView() {
 
             {useTools && (
               <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Orchestrator</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {useOrchestrator
+                        ? "Routes queries to optimal path (direct / single-tool / multi-step)"
+                        : "Plain ReAct: LLM sees all tools and decides what to use"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setUseOrchestrator(!useOrchestrator)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                      useOrchestrator
+                        ? "bg-primary-500"
+                        : "bg-gray-300 dark:bg-gray-600"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        useOrchestrator ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium mb-2 flex items-center gap-2">
                     <Search size={16} />

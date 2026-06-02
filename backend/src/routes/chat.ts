@@ -11,6 +11,7 @@ const chatSchema = z.object({
   sessionId: z.string().uuid(),
   message: z.string().min(1),
   useTools: z.boolean().optional().default(false),
+  useOrchestrator: z.boolean().optional().default(true),
   searchEngine: z.enum(["duckduckgo", "google"]).optional().default("duckduckgo"),
   googleApiKey: z.string().optional(),
   googleCx: z.string().optional(),
@@ -23,7 +24,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { sessionId, message, useTools, searchEngine, googleApiKey, googleCx } = parsed.data;
+  const { sessionId, message, useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = parsed.data;
 
   const dbStartFetch = Date.now();
   let session;
@@ -69,6 +70,7 @@ router.post("/", async (req, res) => {
       searchEngine,
       googleApiKey,
       googleCx,
+      useOrchestrator,
       (event) => {
         if (event.type === "trace") {
           try {

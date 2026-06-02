@@ -97,6 +97,7 @@ export const api = {
     onError: (error: string) => void,
     options?: {
       useTools?: boolean;
+      useOrchestrator?: boolean;
       searchEngine?: string;
       googleApiKey?: string;
       googleCx?: string;
@@ -113,6 +114,7 @@ export const api = {
         sessionId,
         message,
         useTools: options?.useTools ?? false,
+        useOrchestrator: options?.useOrchestrator ?? true,
         searchEngine: options?.searchEngine ?? "duckduckgo",
         googleApiKey: options?.googleApiKey || undefined,
         googleCx: options?.googleCx || undefined,

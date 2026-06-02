@@ -8,6 +8,7 @@ export function ChatInput() {
   const sendMessage = useAppStore((s) => s.sendMessage);
   const isStreaming = useAppStore((s) => s.isStreaming);
   const useTools = useAppStore((s) => s.useTools);
+  const useOrchestrator = useAppStore((s) => s.useOrchestrator);
   const searchEngine = useAppStore((s) => s.searchEngine);
 
   const handleSubmit = () => {
@@ -39,7 +40,7 @@ export function ChatInput() {
         <div className="max-w-3xl mx-auto mb-2">
           <span className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-2 py-1 rounded-full">
             <Wrench size={12} />
-            Tools active &middot; {searchEngine === "google" ? "Google" : "DuckDuckGo"}
+            {useOrchestrator ? "Orchestrator" : "ReAct"} &middot; {searchEngine === "google" ? "Google" : "DuckDuckGo"}
           </span>
         </div>
       )}

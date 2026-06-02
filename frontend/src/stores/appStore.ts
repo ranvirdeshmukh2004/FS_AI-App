@@ -20,6 +20,7 @@ interface AppState {
   sidebarOpen: boolean;
   error: string | null;
   useTools: boolean;
+  useOrchestrator: boolean;
   searchEngine: SearchEngine;
   googleApiKey: string;
   googleCx: string;
@@ -42,6 +43,7 @@ interface AppState {
   setModel: (model: string) => void;
 
   setUseTools: (enabled: boolean) => void;
+  setUseOrchestrator: (enabled: boolean) => void;
   setSearchEngine: (engine: SearchEngine) => void;
   setGoogleApiKey: (key: string) => void;
   setGoogleCx: (cx: string) => void;
@@ -63,6 +65,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarOpen: true,
   error: null,
   useTools: true,
+  useOrchestrator: localStorage.getItem("useOrchestrator") !== "false",
   searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
   googleApiKey: localStorage.getItem("googleApiKey") || "",
   googleCx: localStorage.getItem("googleCx") || "",
@@ -162,6 +165,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setModel: (model) => set({ selectedModel: model }),
 
   setUseTools: (enabled) => set({ useTools: enabled }),
+  setUseOrchestrator: (enabled) => {
+    localStorage.setItem("useOrchestrator", String(enabled));
+    set({ useOrchestrator: enabled });
+  },
   setSearchEngine: (engine) => {
     localStorage.setItem("searchEngine", engine);
     set({ searchEngine: engine });
@@ -191,7 +198,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: new Date().toISOString(),
       };
 
-      const { useTools, searchEngine, googleApiKey, googleCx } = get();
+      const { useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = get();
 
       set((s) => ({
         messages: [...s.messages, userMessage],
@@ -257,6 +264,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         {
           useTools,
+          useOrchestrator,
           searchEngine,
           googleApiKey: searchEngine === "google" ? googleApiKey : undefined,
           googleCx: searchEngine === "google" ? googleCx : undefined,
