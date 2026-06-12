@@ -22,6 +22,7 @@ export async function streamReactChat(
   useOrchestrator: boolean,
   sessionId: string | undefined,
   embeddingApiKey: string | undefined,
+  maxTokens: number,
   onEvent: (event: { type: string; content: string }) => void,
   onDone: (fullText: string) => void,
   onError: (err: Error) => void
@@ -53,6 +54,7 @@ export async function streamReactChat(
         use_orchestrator: useOrchestrator,
         session_id: sessionId || null,
         embedding_api_key: embeddingApiKey || null,
+        max_tokens: maxTokens,
         stream: true,
       }),
     });

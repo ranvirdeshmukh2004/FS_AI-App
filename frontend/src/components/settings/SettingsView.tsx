@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Server,
   Plus,
+  SlidersHorizontal,
 } from "lucide-react";
 
 export function SettingsView() {
@@ -26,11 +27,13 @@ export function SettingsView() {
     providers,
     useTools,
     useOrchestrator,
+    maxTokens,
     searchEngine,
     googleApiKey,
     googleCx,
     setUseTools,
     setUseOrchestrator,
+    setMaxTokens,
     setSearchEngine,
     setGoogleApiKey,
     setGoogleCx,
@@ -340,6 +343,45 @@ export function SettingsView() {
                       }`}
                     />
                   </button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                    <SlidersHorizontal size={16} />
+                    Max Tokens
+                    <span className="ml-auto text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{maxTokens}</span>
+                  </label>
+                  <p className="text-xs text-gray-400 mb-2">
+                    Maximum number of tokens the model can generate per response. Lower values use fewer credits.
+                  </p>
+                  <input
+                    type="range"
+                    min={64}
+                    max={4096}
+                    step={64}
+                    value={maxTokens}
+                    onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary-500 bg-gray-200 dark:bg-gray-700"
+                  />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-gray-400">64</span>
+                    <div className="flex gap-1">
+                      {[256, 512, 1024, 2048, 4096].map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => setMaxTokens(v)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                            maxTokens === v
+                              ? "bg-primary-500 text-white"
+                              : "bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-gray-400">4096</span>
+                  </div>
                 </div>
 
                 <div>

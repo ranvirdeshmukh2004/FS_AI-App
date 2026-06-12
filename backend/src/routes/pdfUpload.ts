@@ -29,7 +29,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
   try {
     const formData = new FormData();
-    formData.append("file", new Blob([req.file.buffer], { type: "application/pdf" }), req.file.originalname);
+    formData.append("file", new Blob([req.file.buffer as any], { type: "application/pdf" }), req.file.originalname);
     formData.append("session_id", sessionId);
     formData.append("embedding_api_key", embeddingKey);
     if (req.body.docId) formData.append("doc_id", req.body.docId);

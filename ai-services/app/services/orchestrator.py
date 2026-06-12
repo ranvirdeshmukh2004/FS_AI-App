@@ -255,6 +255,7 @@ async def run_orchestrator_stream(
     search_engine: str = "duckduckgo",
     google_api_key: str | None = None,
     google_cx: str | None = None,
+    max_tokens: int = 512,
 ) -> AsyncGenerator[dict, None]:
     """
     Orchestrator entry point. Classifies the query, then routes to:
@@ -287,7 +288,7 @@ async def run_orchestrator_stream(
     # --- DIRECT: No tools needed ---
     if route == QueryRoute.DIRECT:
         step_start = time.time()
-        response, usage = await call_llm(base_url, api_key, model, conversation_messages)
+        response, usage = await call_llm(base_url, api_key, model, conversation_messages, max_tokens=max_tokens)
         dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -324,7 +325,7 @@ async def run_orchestrator_stream(
         ]
 
         step_start = time.time()
-        response, usage = await call_llm(base_url, api_key, model, synth_messages)
+        response, usage = await call_llm(base_url, api_key, model, synth_messages, max_tokens=max_tokens)
         dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -347,7 +348,7 @@ async def run_orchestrator_stream(
 
     for step in range(MAX_REACT_STEPS):
         step_start = time.time()
-        full_response, usage = await call_llm(base_url, api_key, model, messages)
+        full_response, usage = await call_llm(base_url, api_key, model, messages, max_tokens=max_tokens)
         llm_dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -409,7 +410,7 @@ async def run_orchestrator_stream(
 
     # Exhausted steps
     messages.append({"role": "user", "content": "Provide your Final Answer now."})
-    final_response, usage = await call_llm(base_url, api_key, model, messages)
+    final_response, usage = await call_llm(base_url, api_key, model, messages, max_tokens=max_tokens)
     total_in += usage.get("prompt_tokens", 0)
     total_out += usage.get("completion_tokens", 0)
     final = _parse_final_answer(final_response) or final_response

@@ -21,6 +21,7 @@ interface AppState {
   error: string | null;
   useTools: boolean;
   useOrchestrator: boolean;
+  maxTokens: number;
   searchEngine: SearchEngine;
   googleApiKey: string;
   googleCx: string;
@@ -44,6 +45,7 @@ interface AppState {
 
   setUseTools: (enabled: boolean) => void;
   setUseOrchestrator: (enabled: boolean) => void;
+  setMaxTokens: (tokens: number) => void;
   setSearchEngine: (engine: SearchEngine) => void;
   setGoogleApiKey: (key: string) => void;
   setGoogleCx: (cx: string) => void;
@@ -66,6 +68,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   useTools: true,
   useOrchestrator: localStorage.getItem("useOrchestrator") !== "false",
+  maxTokens: parseInt(localStorage.getItem("maxTokens") || "512"),
   searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
   googleApiKey: localStorage.getItem("googleApiKey") || "",
   googleCx: localStorage.getItem("googleCx") || "",
@@ -169,6 +172,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem("useOrchestrator", String(enabled));
     set({ useOrchestrator: enabled });
   },
+  setMaxTokens: (tokens) => {
+    const clamped = Math.max(128, Math.min(4096, tokens));
+    localStorage.setItem("maxTokens", String(clamped));
+    set({ maxTokens: clamped });
+  },
   setSearchEngine: (engine) => {
     localStorage.setItem("searchEngine", engine);
     set({ searchEngine: engine });
@@ -198,7 +206,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: new Date().toISOString(),
       };
 
-      const { useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = get();
+      const { useTools, useOrchestrator, maxTokens, searchEngine, googleApiKey, googleCx } = get();
 
       set((s) => ({
         messages: [...s.messages, userMessage],
@@ -265,6 +273,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         {
           useTools,
           useOrchestrator,
+          maxTokens,
           searchEngine,
           googleApiKey: searchEngine === "google" ? googleApiKey : undefined,
           googleCx: searchEngine === "google" ? googleCx : undefined,

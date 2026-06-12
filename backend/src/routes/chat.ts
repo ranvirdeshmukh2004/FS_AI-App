@@ -12,6 +12,7 @@ const chatSchema = z.object({
   message: z.string().min(1),
   useTools: z.boolean().optional().default(false),
   useOrchestrator: z.boolean().optional().default(true),
+  maxTokens: z.number().int().min(64).max(4096).optional().default(512),
   searchEngine: z.enum(["duckduckgo", "google"]).optional().default("duckduckgo"),
   googleApiKey: z.string().optional(),
   googleCx: z.string().optional(),
@@ -24,7 +25,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { sessionId, message, useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = parsed.data;
+  const { sessionId, message, useTools, useOrchestrator, maxTokens, searchEngine, googleApiKey, googleCx } = parsed.data;
 
   // Get OpenAI/OpenRouter key for embeddings (doc_search needs it)
   const embeddingApiKey = await (async () => {
@@ -82,6 +83,7 @@ router.post("/", async (req, res) => {
       useOrchestrator,
       sessionId,
       embeddingApiKey,
+      maxTokens,
       (event) => {
         if (event.type === "trace") {
           try {
@@ -114,6 +116,7 @@ router.post("/", async (req, res) => {
       session.provider,
       session.model,
       messages,
+      maxTokens,
       (chunk) => {
         res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
       },

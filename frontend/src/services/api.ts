@@ -122,6 +122,7 @@ export const api = {
     options?: {
       useTools?: boolean;
       useOrchestrator?: boolean;
+      maxTokens?: number;
       searchEngine?: string;
       googleApiKey?: string;
       googleCx?: string;
@@ -139,6 +140,7 @@ export const api = {
         message,
         useTools: options?.useTools ?? false,
         useOrchestrator: options?.useOrchestrator ?? true,
+        maxTokens: options?.maxTokens ?? 512,
         searchEngine: options?.searchEngine ?? "duckduckgo",
         googleApiKey: options?.googleApiKey || undefined,
         googleCx: options?.googleCx || undefined,

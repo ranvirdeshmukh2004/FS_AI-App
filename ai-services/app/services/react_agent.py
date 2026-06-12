@@ -123,17 +123,48 @@ async def _execute_tool(action: str, action_input: str, search_engine: str = "du
         return f"Unknown tool: {action}. Available: web_search, wikipedia, calculator, datetime, weather, read_url, python_executor, doc_search"
 
 
-async def _call_llm(base_url: str, api_key: str, model: str, messages: list[dict]) -> tuple[str, dict]:
+async def _call_llm(base_url: str, api_key: str, model: str, messages: list[dict], max_tokens: int = 512) -> tuple[str, dict]:
     """Call LLM (OpenAI-compatible or Anthropic). Returns (content, usage)."""
     if _is_anthropic(base_url):
-        return await _call_anthropic(base_url, api_key, model, messages)
+        return await _call_anthropic(base_url, api_key, model, messages, max_tokens)
 
     url = f"{base_url}/chat/completions"
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(url, headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
-        }, json={"model": model, "messages": messages, "max_tokens": 2048, "temperature": 0.3})
+        }, json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.3})
+
+        if resp.status_code == 404 and ":8080" in base_url:
+            base_chat_url = base_url.replace("/v1", "")
+            
+            doc_context = ""
+            user_question = ""
+            
+            for m in messages:
+                if m["role"] == "assistant" and "Observation:" in m["content"]:
+                    doc_context = m["content"]
+                elif m["role"] == "user":
+                    user_question = m["content"]
+            
+            if doc_context and user_question:
+                combined_message = f"Context:\n{doc_context}\n\nQuestion: {user_question}\nAnswer based on context:"
+            else:
+                combined_message = messages[-1]["content"] if messages else ""
+
+            custom_resp = await client.post(f"{base_chat_url}/chat", headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }, json={
+                "message": combined_message,
+                "max_tokens": max_tokens
+            })
+            if custom_resp.status_code == 200:
+                data = custom_resp.json()
+                return data.get("response", ""), {
+                    "prompt_tokens": 0,
+                    "completion_tokens": data.get("tokens_used", 0)
+                }
 
         if resp.status_code != 200:
             raise Exception(f"LLM API returned {resp.status_code}: {resp.text}")
@@ -145,13 +176,13 @@ async def _call_llm(base_url: str, api_key: str, model: str, messages: list[dict
                          "completion_tokens": usage.get("completion_tokens", 0)}
 
 
-async def _call_anthropic(base_url: str, api_key: str, model: str, messages: list[dict]) -> tuple[str, dict]:
+async def _call_anthropic(base_url: str, api_key: str, model: str, messages: list[dict], max_tokens: int = 512) -> tuple[str, dict]:
     """Call Anthropic Messages API."""
     url = f"{base_url}/messages"
     system_msg = next((m["content"] for m in messages if m["role"] == "system"), None)
     conv = [m for m in messages if m["role"] != "system"]
 
-    body: dict = {"model": model, "messages": conv, "max_tokens": 2048, "temperature": 0.3}
+    body: dict = {"model": model, "messages": conv, "max_tokens": max_tokens, "temperature": 0.3}
     if system_msg:
         body["system"] = system_msg
 
@@ -190,6 +221,7 @@ async def run_react_agent_stream(
     search_engine: str = "duckduckgo",
     google_api_key: str | None = None,
     google_cx: str | None = None,
+    max_tokens: int = 512,
 ) -> AsyncGenerator[dict, None]:
     start_time = time.time()
     system_prompt = _build_system_prompt(search_engine)
@@ -202,7 +234,7 @@ async def run_react_agent_stream(
 
     for step in range(MAX_REACT_STEPS):
         step_start = time.time()
-        full_response, usage = await _call_llm(base_url, api_key, model, messages)
+        full_response, usage = await _call_llm(base_url, api_key, model, messages, max_tokens)
         llm_dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -259,7 +291,7 @@ async def run_react_agent_stream(
         messages.append({"role": "user", "content": f"Observation: {observation}\n\nContinue reasoning. Provide Final Answer if ready, or use another tool."})
 
     messages.append({"role": "user", "content": "Provide your Final Answer now."})
-    final_response, usage = await _call_llm(base_url, api_key, model, messages)
+    final_response, usage = await _call_llm(base_url, api_key, model, messages, max_tokens)
     total_in += usage.get("prompt_tokens", 0)
     total_out += usage.get("completion_tokens", 0)
     final = _parse_final_answer(final_response) or final_response

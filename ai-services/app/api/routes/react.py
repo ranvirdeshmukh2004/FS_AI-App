@@ -35,6 +35,7 @@ class ReactRequest(BaseModel):
     use_orchestrator: bool = True
     session_id: str | None = None
     embedding_api_key: str | None = None
+    max_tokens: int = 512
     stream: bool = True
 
 
@@ -72,6 +73,7 @@ async def _stream_orchestrated(req: ReactRequest, conversation: list[dict]):
             search_engine=req.search_engine,
             google_api_key=req.google_api_key,
             google_cx=req.google_cx,
+            max_tokens=req.max_tokens,
         ):
             yield f"data: {json.dumps(event)}\n\n"
     except Exception as e:
@@ -89,6 +91,7 @@ async def _stream_react(req: ReactRequest, conversation: list[dict]):
             search_engine=req.search_engine,
             google_api_key=req.google_api_key,
             google_cx=req.google_cx,
+            max_tokens=req.max_tokens,
         ):
             yield f"data: {json.dumps(event)}\n\n"
     except Exception as e:

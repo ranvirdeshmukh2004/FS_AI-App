@@ -73,11 +73,22 @@ router.post("/test", async (req, res) => {
         res.json({ valid: true, message: `Connected to ${providerConfig.name} successfully` });
       }
     } else {
-      response = await fetch(`${providerConfig.baseUrl}/models`, {
+      let urlToTest = `${providerConfig.baseUrl}/models`;
+      response = await fetch(urlToTest, {
         method: "GET",
         headers: { Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(10000),
       });
+
+      // Fallback for custom EC2 FastAPI servers that expose /health instead of /models
+      if (response.status === 404 && provider === "self-hosted") {
+        let baseHealthUrl = providerConfig.baseUrl.replace(/\/v1$/, ""); // Remove /v1 if present
+        response = await fetch(`${baseHealthUrl}/health`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(10000),
+        });
+      }
 
       if (response.ok) {
         res.json({ valid: true, message: `Connected to ${providerConfig.name} successfully` });
