@@ -35,6 +35,7 @@ interface AppState {
 
   loadSessions: () => void;
   loadSession: (id: string) => void;
+  newChat: () => void;
   createSession: () => Promise<string | null>;
   deleteSession: (id: string) => void;
   updateSessionTitle: (id: string, title: string) => void;
@@ -68,7 +69,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   useTools: true,
   useOrchestrator: localStorage.getItem("useOrchestrator") !== "false",
-  maxTokens: parseInt(localStorage.getItem("maxTokens") || "512"),
+  maxTokens: parseInt(localStorage.getItem("maxTokens") || "1024"),
   searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
   googleApiKey: localStorage.getItem("googleApiKey") || "",
   googleCx: localStorage.getItem("googleCx") || "",
@@ -90,6 +91,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     api.getSessions()
       .then((sessions) => set({ sessions }))
       .catch(() => set({ sessions: [] }));
+  },
+
+  newChat: () => {
+    set({ activeSessionId: null, messages: [], error: null, streamingContent: "", toolActivity: null, pendingTrace: null });
   },
 
   loadSession: (id) => {
@@ -159,13 +164,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setProvider: (provider) => {
     const providerData = get().providers.find((p) => p.id === provider);
-    set({
-      selectedProvider: provider,
-      selectedModel: providerData?.models[0]?.id || "",
-    });
+    const newModel = providerData?.models[0]?.id || "";
+    set({ selectedProvider: provider, selectedModel: newModel });
+    const { activeSessionId } = get();
+    if (activeSessionId && newModel) {
+      api.updateSessionModel(activeSessionId, provider, newModel).catch(() => {});
+    }
   },
 
-  setModel: (model) => set({ selectedModel: model }),
+  setModel: (model) => {
+    set({ selectedModel: model });
+    const { activeSessionId, selectedProvider } = get();
+    if (activeSessionId) {
+      api.updateSessionModel(activeSessionId, selectedProvider, model).catch(() => {});
+    }
+  },
 
   setUseTools: (enabled) => set({ useTools: enabled }),
   setUseOrchestrator: (enabled) => {

@@ -40,6 +40,23 @@ router.post("/test", async (req, res) => {
   }
 
   const { provider, key } = parsed.data;
+
+  // Ollama is local — no API key needed, just ping it
+  if (provider === "ollama") {
+    const ollamaBase = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+    try {
+      const r = await fetch(`${ollamaBase}/api/tags`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) {
+        res.json({ valid: true, message: "Ollama is running locally — no API key needed" });
+      } else {
+        res.json({ valid: false, message: "Ollama responded but with an error" });
+      }
+    } catch {
+      res.json({ valid: false, message: "Ollama is not running. Start it with: ollama serve" });
+    }
+    return;
+  }
+
   const providerConfig = getProviderConfig(provider);
 
   if (!providerConfig) {

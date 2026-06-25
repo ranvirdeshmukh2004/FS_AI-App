@@ -15,6 +15,11 @@ const updateTitleSchema = z.object({
   title: z.string().min(1),
 });
 
+const updateModelSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+});
+
 router.get("/", async (_req, res) => {
   try {
     const sessions = await sessionService.listSessions();
@@ -55,6 +60,25 @@ router.post("/", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Failed to create session");
     res.status(500).json({ error: "Failed to create session. Check database connection." });
+  }
+});
+
+router.patch("/:id/model", async (req, res) => {
+  const parsed = updateModelSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const session = await sessionService.updateSessionModel(
+      req.params.id,
+      parsed.data.provider,
+      parsed.data.model
+    );
+    res.json(session);
+  } catch (err) {
+    logger.error({ err }, "Failed to update session model");
+    res.status(500).json({ error: "Database error" });
   }
 });
 

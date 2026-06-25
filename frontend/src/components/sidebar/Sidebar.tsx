@@ -15,7 +15,7 @@ export function Sidebar() {
     activeSessionId,
     sidebarOpen,
     setSidebarOpen,
-    createSession,
+    newChat,
     loadSession,
     deleteSession,
     setView,
@@ -42,7 +42,7 @@ export function Sidebar() {
       <div className="p-3">
         <button
           onClick={() => {
-            createSession();
+            newChat();
             setView("chat");
           }}
           className="btn-primary w-full flex items-center justify-center gap-2"

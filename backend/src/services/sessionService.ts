@@ -41,6 +41,13 @@ export async function updateSessionTitle(id: string, title: string) {
   });
 }
 
+export async function updateSessionModel(id: string, provider: string, model: string) {
+  return prisma.chatSession.update({
+    where: { id },
+    data: { provider, model },
+  });
+}
+
 export async function deleteSession(id: string) {
   return prisma.chatSession.delete({ where: { id } });
 }

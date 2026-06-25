@@ -20,7 +20,13 @@ import {
   Server,
   Plus,
   SlidersHorizontal,
+  Download,
+  Cpu,
+  WifiOff,
+  Wifi,
+  HardDrive,
 } from "lucide-react";
+import type { OllamaModel, OllamaPullProgress } from "@/types";
 
 export function SettingsView() {
   const {
@@ -52,6 +58,16 @@ export function SettingsView() {
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [googleSaved, setGoogleSaved] = useState(false);
 
+  // Ollama state
+  const [ollamaRunning, setOllamaRunning] = useState<boolean | null>(null);
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [ollamaPullName, setOllamaPullName] = useState("");
+  const [ollamaPulling, setOllamaPulling] = useState(false);
+  const [ollamaPullProgress, setOllamaPullProgress] = useState<OllamaPullProgress | null>(null);
+  const [ollamaPullError, setOllamaPullError] = useState<string | null>(null);
+  const [ollamaPullDone, setOllamaPullDone] = useState(false);
+  const [ollamaDeleting, setOllamaDeleting] = useState<string | null>(null);
+
   // Custom endpoint state
   const [endpoints, setEndpoints] = useState<CustomEndpoint[]>([]);
   const [showEndpointForm, setShowEndpointForm] = useState(false);
@@ -64,6 +80,53 @@ export function SettingsView() {
   const [epTestResult, setEpTestResult] = useState<{ valid: boolean; message: string; models?: string[] } | null>(null);
   const [epSaving, setEpSaving] = useState(false);
   const loadProviders = useAppStore((s) => s.loadProviders);
+
+  const loadOllama = async () => {
+    try {
+      const status = await api.getOllamaStatus();
+      setOllamaRunning(status.running);
+      if (status.running) {
+        const models = await api.getOllamaModels();
+        setOllamaModels(models);
+      }
+    } catch {
+      setOllamaRunning(false);
+    }
+  };
+
+  const handlePullModel = () => {
+    const name = ollamaPullName.trim();
+    if (!name || ollamaPulling) return;
+    setOllamaPulling(true);
+    setOllamaPullProgress(null);
+    setOllamaPullError(null);
+    setOllamaPullDone(false);
+    api.pullOllamaModel(
+      name,
+      (p) => setOllamaPullProgress(p),
+      () => {
+        setOllamaPulling(false);
+        setOllamaPullDone(true);
+        setOllamaPullName("");
+        loadOllama();
+        loadProviders();
+      },
+      (err) => {
+        setOllamaPulling(false);
+        setOllamaPullError(err);
+      }
+    );
+  };
+
+  const handleDeleteOllamaModel = async (name: string) => {
+    setOllamaDeleting(name);
+    try {
+      await api.deleteOllamaModel(name);
+      await loadOllama();
+      loadProviders();
+    } catch { /* ignore */ }
+    setOllamaDeleting(null);
+  };
 
   const loadEndpoints = async () => {
     try {
@@ -122,6 +185,7 @@ export function SettingsView() {
   useEffect(() => {
     loadKeys();
     loadEndpoints();
+    loadOllama();
   }, []);
 
   useEffect(() => {
@@ -525,6 +589,165 @@ export function SettingsView() {
               </>
             )}
           </div>
+        </div>
+
+        {/* ── Ollama Local Models ── */}
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 border border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Cpu size={18} />
+              Ollama — Local Models
+            </h3>
+            <div className="flex items-center gap-1.5">
+              {ollamaRunning === null ? (
+                <Loader2 size={14} className="animate-spin text-gray-400" />
+              ) : ollamaRunning ? (
+                <>
+                  <Wifi size={14} className="text-green-500" />
+                  <span className="text-xs text-green-600 dark:text-green-400">Running</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={14} className="text-red-400" />
+                  <span className="text-xs text-red-500">Not running</span>
+                </>
+              )}
+              <button
+                onClick={loadOllama}
+                className="ml-2 text-xs text-gray-400 hover:text-gray-600 underline"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Run LLMs on this device for free — no API key needed.
+            Install Ollama, then pull models below and they appear in the model selector automatically.
+          </p>
+
+          {!ollamaRunning && ollamaRunning !== null && (
+            <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300">
+              <p className="font-medium mb-1">Ollama is not running</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Download from <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="underline">ollama.com/download</a> and install</li>
+                <li>It starts automatically as a background service after install</li>
+                <li>Click Refresh above once it's running</li>
+              </ol>
+            </div>
+          )}
+
+          {/* Pull a new model */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1 flex items-center gap-2">
+              <Download size={14} />
+              Pull a model
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Enter any model name from{" "}
+              <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="underline text-primary-500">
+                ollama.com/library
+              </a>
+              . Examples: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">qwen2.5:1.5b</code>,{" "}
+              <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">llama3.2:1b</code>,{" "}
+              <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">phi4-mini</code>
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={ollamaPullName}
+                onChange={(e) => { setOllamaPullName(e.target.value); setOllamaPullDone(false); setOllamaPullError(null); }}
+                onKeyDown={(e) => e.key === "Enter" && handlePullModel()}
+                placeholder="e.g. qwen2.5:1.5b"
+                className="input-field flex-1 text-sm"
+                disabled={ollamaPulling}
+              />
+              <button
+                onClick={handlePullModel}
+                disabled={!ollamaPullName.trim() || ollamaPulling || !ollamaRunning}
+                className="btn-primary text-sm flex items-center gap-2 flex-shrink-0"
+              >
+                {ollamaPulling ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                {ollamaPulling ? "Pulling..." : "Pull"}
+              </button>
+            </div>
+
+            {/* Pull progress */}
+            {ollamaPulling && ollamaPullProgress && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-gray-500">{ollamaPullProgress.status}</p>
+                {ollamaPullProgress.total && ollamaPullProgress.total > 0 && (
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="bg-primary-500 h-1.5 rounded-full transition-all"
+                      style={{ width: `${Math.round(((ollamaPullProgress.completed || 0) / ollamaPullProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                )}
+                {ollamaPullProgress.total && (
+                  <p className="text-xs text-gray-400 font-mono">
+                    {((ollamaPullProgress.completed || 0) / 1e9).toFixed(2)} / {(ollamaPullProgress.total / 1e9).toFixed(2)} GB
+                  </p>
+                )}
+              </div>
+            )}
+            {ollamaPullDone && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                <CheckCircle2 size={14} /> Model pulled successfully — it's now in the model selector!
+              </div>
+            )}
+            {ollamaPullError && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+                <XCircle size={14} /> {ollamaPullError}
+              </div>
+            )}
+          </div>
+
+          {/* Installed models */}
+          {ollamaModels.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                <HardDrive size={14} />
+                Installed models ({ollamaModels.length})
+              </h4>
+              <div className="space-y-2">
+                {ollamaModels.map((m) => (
+                  <div
+                    key={m.name}
+                    className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg px-4 py-2.5 border border-gray-200 dark:border-gray-700"
+                  >
+                    <div>
+                      <span className="font-medium text-sm font-mono">{m.name}</span>
+                      {m.details?.parameter_size && (
+                        <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                          {m.details.parameter_size}
+                        </span>
+                      )}
+                      {m.details?.quantization_level && (
+                        <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">
+                          {m.details.quantization_level}
+                        </span>
+                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {(m.size / 1e9).toFixed(1)} GB
+                        {m.details?.family && ` · ${m.details.family}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteOllamaModel(m.name)}
+                      disabled={ollamaDeleting === m.name}
+                      className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      {ollamaDeleting === m.name ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {ollamaRunning && ollamaModels.length === 0 && (
+            <p className="text-sm text-gray-400 italic">No models installed yet. Pull one above to get started.</p>
+          )}
         </div>
 
         <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 border border-gray-200 dark:border-gray-800">

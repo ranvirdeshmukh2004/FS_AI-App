@@ -1,0 +1,80 @@
+// Local development schema — uses SQLite (no Docker/PostgreSQL needed)
+// Usage: npm run dev:local
+// Do NOT deploy this to production.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ChatSession {
+  id        String    @id @default(uuid())
+  title     String    @default("New Chat")
+  provider  String
+  model     String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  messages  Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  sessionId String      @map("session_id")
+  role      MessageRole
+  content   String
+  tokens    Int?
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("messages")
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  provider  String   @unique
+  key       String
+  label     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("api_keys")
+}
+
+model ProviderModel {
+  id       String  @id @default(uuid())
+  provider String
+  modelId  String  @map("model_id")
+  name     String
+  active   Boolean @default(true)
+
+  @@unique([provider, modelId])
+  @@map("provider_models")
+}
+
+model CustomEndpoint {
+  id        String   @id @default(uuid())
+  name      String
+  baseUrl   String   @map("base_url")
+  apiKey    String?  @map("api_key")
+  modelId   String   @map("model_id")
+  modelName String   @map("model_name")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("custom_endpoints")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}

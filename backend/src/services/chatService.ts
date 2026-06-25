@@ -3,6 +3,8 @@ import { getDecryptedKey } from "./apiKeyService.js";
 import * as endpointService from "./customEndpointService.js";
 import { logger } from "../utils/logger.js";
 
+const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -22,6 +24,16 @@ async function resolveEndpoint(
   provider: string,
   model: string
 ): Promise<{ baseUrl: string; apiKey: string; model: string; isAnthropic: boolean } | null> {
+  // Ollama — local LLM, no API key needed
+  if (provider === "ollama") {
+    return {
+      baseUrl: `${OLLAMA_BASE}/v1`,
+      apiKey: "ollama",
+      model,
+      isAnthropic: false,
+    };
+  }
+
   // Self-hosted custom endpoint
   if (provider === "self-hosted" && model.startsWith("custom:")) {
     const endpointId = model.slice(7); // remove "custom:" prefix
