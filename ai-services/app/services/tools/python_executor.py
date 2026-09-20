@@ -129,7 +129,13 @@ def _apply_rlimits() -> None:
             target = min(target, hard)
         if soft == resource.RLIM_INFINITY or target < soft:
             resource.setrlimit(resource.RLIMIT_AS, (target, hard))
-        resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SECONDS, TIMEOUT_SECONDS))
+        # Deliberately looser than the wall-clock timeout. If they were
+        # equal, a busy loop on Linux would trip SIGXCPU first and the user
+        # would get "resource limit exceeded" instead of the clearer "timed
+        # out". This stays as the backstop for when the parent's poll cannot
+        # reap the child.
+        cpu_limit = TIMEOUT_SECONDS + 2
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit + 1))
         # No core dumps. RLIMIT_NPROC is deliberately left alone: it counts
         # the whole user's processes, not this one's children, so setting it
         # to 0 can wedge an unrelated part of the system.
