@@ -1,3 +1,9 @@
+# Full local stack: frontend, API, AI service, PostgreSQL and Qdrant.
+#
+# This runs everything on one machine with server-stored API keys
+# (DEMO_MODE=false), which is the right mode when you are the only user.
+# For the hosted free-tier setup see render.yaml and vercel.json.
+
 services:
   frontend:
     build: ./frontend
@@ -14,20 +20,35 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      NODE_ENV: production
       AI_SERVICES_URL: http://ai-services:8000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-localdev123}@postgres:5432/fs_ai_chat
+      # nginx serves the frontend from the same origin, so no cross-origin
+      # requests are involved here.
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
     depends_on:
-      - postgres
-      - ai-services
+      postgres:
+        condition: service_healthy
+      ai-services:
+        condition: service_started
     restart: unless-stopped
 
   ai-services:
     build: ./ai-services
     ports:
       - "8000:8000"
-    env_file:
-      - ./ai-services/.env
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      CORS_ORIGINS: ${AI_CORS_ORIGINS:-*}
+      # Executes model-authored code — see ai-services/app/services/tools/
+      # python_executor.py for why this is off unless you opt in.
+      ENABLE_PYTHON_TOOL: ${ENABLE_PYTHON_TOOL:-false}
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
     restart: unless-stopped
 
   postgres:
@@ -40,6 +61,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev123}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Lets the backend wait for a database that can actually accept queries,
+    # rather than one whose container has merely started.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fs_ai_chat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   qdrant:
