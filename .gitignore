@@ -16,4 +16,7 @@ venv/
 coverage/
 .turbo/
 prisma/*.db
+**/*.db
+**/*.db-journal
+*.tsbuildinfo
 /instances
