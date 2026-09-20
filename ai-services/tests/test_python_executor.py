@@ -92,6 +92,13 @@ class ExecutorTest(unittest.TestCase):
         out = run("while True: pass")
         self.assertIn("timed out", out.lower())
 
+    def test_large_allocation_is_refused_or_survived(self):
+        # On Linux RLIMIT_AS turns this into a MemoryError; macOS overcommits
+        # and the wall-clock timeout is the backstop. Either is acceptable —
+        # what must not happen is the service dying.
+        run("x = [0] * (10 ** 10)")
+        self.assertIn("2", run("print(1 + 1)"))
+
     def test_service_survives_a_timeout(self):
         # The point of the subprocess: a runaway child must not take the
         # event loop, or the next request, down with it.

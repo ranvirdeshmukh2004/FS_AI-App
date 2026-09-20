@@ -30,7 +30,14 @@ logger = logging.getLogger(__name__)
 # Wall-clock ceiling for one execution.
 TIMEOUT_SECONDS = 5
 # Address-space ceiling for the child process.
-MEMORY_LIMIT_BYTES = 256 * 1024 * 1024
+#
+# This is virtual address space, not resident memory, and it has to cover the
+# child's own interpreter and imports before any user code runs. A 256MB cap
+# looked fine on macOS (which largely ignores RLIMIT_AS) and failed every
+# single execution on Linux with MemoryError, because the spawned child
+# reserves well over that just starting up. 2GB of address space still costs
+# nothing resident and still stops a genuine runaway allocation.
+MEMORY_LIMIT_BYTES = 2 * 1024 * 1024 * 1024
 # Cap the payload we ship back across the pipe.
 MAX_OUTPUT_CHARS = 3000
 
@@ -114,12 +121,19 @@ def _apply_rlimits() -> None:
 
         # RLIMIT_AS is enforced on Linux (where this deploys). macOS
         # overcommits and largely ignores it, so the wall-clock timeout is
-        # the backstop there.
-        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
+        # the backstop there. Never lower an existing limit that is already
+        # tighter than ours.
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        target = MEMORY_LIMIT_BYTES
+        if hard != resource.RLIM_INFINITY:
+            target = min(target, hard)
+        if soft == resource.RLIM_INFINITY or target < soft:
+            resource.setrlimit(resource.RLIMIT_AS, (target, hard))
         resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SECONDS, TIMEOUT_SECONDS))
-        # No core dumps, and no child processes of our own.
+        # No core dumps. RLIMIT_NPROC is deliberately left alone: it counts
+        # the whole user's processes, not this one's children, so setting it
+        # to 0 can wedge an unrelated part of the system.
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
     except Exception:  # pragma: no cover - platform dependent
         pass
 
