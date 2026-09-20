@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { api } from "@/services/api";
+import * as byok from "@/services/byokStore";
 import type { ApiKeyInfo } from "@/types";
 import type { CustomEndpoint } from "@/types";
 import {
@@ -18,6 +19,7 @@ import {
   Search,
   ExternalLink,
   Server,
+  ShieldCheck,
   Plus,
   SlidersHorizontal,
   Download,
@@ -44,6 +46,7 @@ export function SettingsView() {
     setGoogleApiKey,
     setGoogleCx,
   } = useAppStore();
+  const [demoMode, setDemoMode] = useState<boolean | null>(null);
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [formProvider, setFormProvider] = useState("");
   const [formKey, setFormKey] = useState("");
@@ -183,10 +186,20 @@ export function SettingsView() {
   };
 
   useEffect(() => {
-    loadKeys();
+    // Ask the server how it is configured before reading keys, since where
+    // keys live depends on the answer.
+    api
+      .getConfig()
+      .then((cfg) => setDemoMode(cfg.demoMode))
+      .catch(() => setDemoMode(false));
     loadEndpoints();
     loadOllama();
   }, []);
+
+  useEffect(() => {
+    if (demoMode === null) return;
+    loadKeys();
+  }, [demoMode]);
 
   useEffect(() => {
     if (providers.length > 0 && !formProvider) {
@@ -200,7 +213,34 @@ export function SettingsView() {
     setSaveSuccess(false);
   }, [formProvider, formKey]);
 
+  /**
+   * Two sources of truth, depending on how the server is configured.
+   *
+   * Demo deployments keep no keys at all, so the list is built from what
+   * this browser is holding. Self-hosted deployments read the encrypted
+   * rows from the database as before.
+   */
   const loadKeys = async () => {
+    if (demoMode) {
+      setKeys(
+        byok.listStoredProviders().map((provider) => {
+          const stored = byok.getProviderKey(provider) || "";
+          return {
+            id: provider,
+            provider,
+            label: undefined,
+            keyPreview:
+              stored.length > 12
+                ? `${stored.slice(0, 4)}...${stored.slice(-4)}`
+                : "****",
+            createdAt: "",
+            updatedAt: "",
+          } as ApiKeyInfo;
+        })
+      );
+      return;
+    }
+
     try {
       const data = await api.getApiKeys();
       setKeys(data);
@@ -230,7 +270,12 @@ export function SettingsView() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await api.saveApiKey(formProvider, formKey.trim());
+      if (demoMode) {
+        // Never leaves this browser.
+        byok.setProviderKey(formProvider, formKey.trim());
+      } else {
+        await api.saveApiKey(formProvider, formKey.trim());
+      }
       setFormKey("");
       setSaveSuccess(true);
       setTestResult(null);
@@ -243,7 +288,11 @@ export function SettingsView() {
   };
 
   const handleDelete = async (provider: string) => {
-    await api.deleteApiKey(provider);
+    if (demoMode) {
+      byok.clearProviderKey(provider);
+    } else {
+      await api.deleteApiKey(provider);
+    }
     await loadKeys();
   };
 
@@ -259,6 +308,30 @@ export function SettingsView() {
           <Key size={24} />
           API Key Settings
         </h2>
+
+        {demoMode && (
+          <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-4">
+            <div className="flex gap-3">
+              <ShieldCheck size={20} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                  Bring your own key
+                </p>
+                <p className="mt-1 text-emerald-800 dark:text-emerald-300">
+                  This is a public demo, so it stores nothing. Your key is kept
+                  in this browser tab only, sent directly with your own
+                  requests, and forgotten when you close the tab. It is never
+                  written to the server, never logged, and never visible to
+                  anyone else.
+                </p>
+                <p className="mt-2 text-emerald-700 dark:text-emerald-400 text-xs">
+                  Usage is billed to your own provider account. Prefer a key
+                  with a spending limit.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mb-8 border border-gray-200 dark:border-gray-800">
           <h3 className="font-semibold mb-4">Add / Update API Key</h3>
@@ -837,7 +910,9 @@ export function SettingsView() {
           <div className="text-center py-8 text-gray-400">
             <Key size={32} className="mx-auto mb-3 opacity-50" />
             <p className="text-sm">
-              No API keys configured yet. Add one above to get started.
+              {demoMode
+                ? "No key entered yet. Add one above — it stays in this browser."
+                : "No API keys configured yet. Add one above to get started."}
             </p>
             <p className="text-xs mt-1">
               Tip: Use the "Test Key" button to verify your key works before saving.
@@ -857,6 +932,12 @@ export function SettingsView() {
                   <span className="ml-3 text-sm text-gray-400 font-mono">
                     {k.keyPreview}
                   </span>
+                  {k.corrupt && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      Could not be decrypted — ENCRYPTION_KEY has probably
+                      changed. Delete this entry and add the key again.
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => handleDelete(k.provider)}
