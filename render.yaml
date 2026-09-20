@@ -1,0 +1,77 @@
+# Render Blueprint — deploys the API and the AI service on the free tier.
+#
+# Not covered here (both have their own free tiers, created separately):
+#   - PostgreSQL  -> Neon           (DATABASE_URL)
+#   - Vectors     -> Qdrant Cloud   (QDRANT_URL, QDRANT_API_KEY)
+#   - Frontend    -> Vercel         (see vercel.json)
+#
+# Free instances sleep after ~15 minutes idle and take roughly 50 seconds to
+# wake. The app handles this: the UI shows a "waking up" message rather than
+# a raw error, and chat still works with tools switched off while the AI
+# service starts.
+
+services:
+  - type: web
+    name: fs-ai-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # BYOK. Visitors supply their own provider keys, which are never
+      # stored. Do not set this to false on a public URL.
+      - key: DEMO_MODE
+        value: "true"
+
+      # Neon connection string. Include ?sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+
+      # Your Vercel frontend URL, e.g. https://fs-ai-chat.vercel.app
+      # Comma-separate to allow preview deployments too.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Internal URL of the AI service below.
+      - key: AI_SERVICES_URL
+        fromService:
+          type: web
+          name: fs-ai-services
+          property: hostport
+
+      # Only used when DEMO_MODE=false. Generate: openssl rand -hex 32
+      - key: ENCRYPTION_KEY
+        generateValue: true
+
+      - key: MAX_UPLOAD_MB
+        value: "10"
+
+  - type: web
+    name: fs-ai-services
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./ai-services/Dockerfile
+    dockerContext: ./ai-services
+    healthCheckPath: /api/health
+    envVars:
+      # Qdrant Cloud cluster URL and key. Leave unset to run without a
+      # vector store — chat and tools still work, semantic memory and PDF
+      # search do not.
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+
+      # Only the backend calls this service, so restrict it to that origin.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Executes model-authored code. Keep this off on a public deployment.
+      - key: ENABLE_PYTHON_TOOL
+        value: "false"

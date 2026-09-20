@@ -1,4 +1,10 @@
-node_modules
-dist
+node_modules/
+dist/
 .env
-.env.local
+.env.*
+!.env.example
+*.md
+prisma/*.db
+prisma/prisma/
+*.tsbuildinfo
+.git/
