@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import * as apiKeyService from "../services/apiKeyService.js";
 import { getProviderConfig } from "../config/providers.js";
+import { config } from "../config/index.js";
 import { logger } from "../utils/logger.js";
 
 const router = Router();
@@ -17,19 +18,49 @@ const testSchema = z.object({
   key: z.string().min(1),
 });
 
+/**
+ * In demo mode the server keeps no keys at all, so these routes report an
+ * empty set and refuse writes. Without this a public URL would let anyone
+ * plant or replace a key for every other visitor.
+ */
+function rejectInDemoMode(res: import("express").Response): boolean {
+  if (!config.demoMode) return false;
+  res.status(403).json({
+    error:
+      "This deployment does not store API keys. Your key stays in your browser and is sent only with your own requests.",
+  });
+  return true;
+}
+
 router.get("/", async (_req, res) => {
-  const keys = await apiKeyService.listApiKeys();
-  res.json(keys);
+  if (config.demoMode) {
+    res.json([]);
+    return;
+  }
+  try {
+    const keys = await apiKeyService.listApiKeys();
+    res.json(keys);
+  } catch (err) {
+    logger.error({ err }, "Failed to list API keys");
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 router.post("/", async (req, res) => {
+  if (rejectInDemoMode(res)) return;
+
   const parsed = upsertSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  await apiKeyService.upsertApiKey(parsed.data.provider, parsed.data.key, parsed.data.label);
-  res.status(200).json({ message: "API key saved" });
+  try {
+    await apiKeyService.upsertApiKey(parsed.data.provider, parsed.data.key, parsed.data.label);
+    res.status(200).json({ message: "API key saved" });
+  } catch (err) {
+    logger.error({ err }, "Failed to save API key");
+    res.status(500).json({ error: "Could not save the key. Check ENCRYPTION_KEY and the database connection." });
+  }
 });
 
 router.post("/test", async (req, res) => {
@@ -77,7 +108,7 @@ router.post("/test", async (req, res) => {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-5-haiku-20241022",
+          model: "claude-haiku-4-5-20251001",
           max_tokens: 1,
           messages: [{ role: "user", content: "hi" }],
         }),
@@ -86,8 +117,12 @@ router.post("/test", async (req, res) => {
 
       if (response.status === 401 || response.status === 403) {
         res.json({ valid: false, message: "Invalid API key — authentication failed" });
-      } else {
+      } else if (response.ok || response.status === 429 || response.status === 400) {
+        // 400 here means the key authenticated and the request itself was
+        // rejected (e.g. an unavailable model), which still proves the key.
         res.json({ valid: true, message: `Connected to ${providerConfig.name} successfully` });
+      } else {
+        res.json({ valid: false, message: `${providerConfig.name} returned ${response.status}` });
       }
     } else {
       let urlToTest = `${providerConfig.baseUrl}/models`;
@@ -127,8 +162,18 @@ router.post("/test", async (req, res) => {
 });
 
 router.delete("/:provider", async (req, res) => {
-  await apiKeyService.deleteApiKey(req.params.provider);
-  res.status(204).end();
+  if (rejectInDemoMode(res)) return;
+  try {
+    const deleted = await apiKeyService.deleteApiKey(req.params.provider);
+    if (!deleted) {
+      res.status(404).json({ error: "No key stored for that provider" });
+      return;
+    }
+    res.status(204).end();
+  } catch (err) {
+    logger.error({ err }, "Failed to delete API key");
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 export default router;

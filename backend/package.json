@@ -12,7 +12,10 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "dev:local": "cross-env DATABASE_URL=file:./prisma/dev.db AI_SERVICES_URL=http://127.0.0.1:8001 OLLAMA_BASE_URL=http://localhost:11434 tsx watch src/index.ts",
-    "db:local": "cross-env DATABASE_URL=file:./prisma/dev.db prisma db push --schema=prisma/schema.local.prisma"
+    "db:local": "cross-env DATABASE_URL=file:./prisma/dev.db prisma db push --schema=prisma/schema.local.prisma && npm run generate:local",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "generate:local": "cross-env DATABASE_URL=file:./prisma/dev.db prisma generate --schema=prisma/schema.local.prisma",
+    "db:deploy": "prisma db push --schema=prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as sessionService from "../services/sessionService.js";
 import { streamChat } from "../services/chatService.js";
 import { streamReactChat } from "../services/reactService.js";
+import { resolveApiKey, resolveEmbeddingKey } from "../services/keyResolver.js";
 import { logger } from "../utils/logger.js";
 
 const router = Router();
@@ -27,14 +28,9 @@ router.post("/", async (req, res) => {
 
   const { sessionId, message, useTools, useOrchestrator, maxTokens, searchEngine, googleApiKey, googleCx } = parsed.data;
 
-  // Get OpenAI/OpenRouter key for embeddings (doc_search needs it)
-  const embeddingApiKey = await (async () => {
-    try {
-      // Try openai first, then openrouter
-      const { getDecryptedKey } = await import("../services/apiKeyService.js");
-      return await getDecryptedKey("openai") || await getDecryptedKey("openrouter") || undefined;
-    } catch { return undefined; }
-  })();
+  // Embeddings (doc_search) are optional — the PDF pipeline degrades to
+  // local hash embeddings when no key is available.
+  const embeddingApiKey = await resolveEmbeddingKey(req);
 
   const dbStartFetch = Date.now();
   let session;
@@ -65,10 +61,36 @@ router.post("/", async (req, res) => {
     { role: "user" as const, content: message },
   ];
 
+  // The caller's own key (BYOK) when supplied; a stored key otherwise.
+  const providerKey = await resolveApiKey(req, session.provider);
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  // nginx (and Render's proxy) buffer responses by default, which holds
+  // every token back until the stream ends. This opts that off.
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+
+  // If the visitor closes the tab we abort the upstream request rather than
+  // paying for tokens nobody will read.
+  const abort = new AbortController();
+  let clientGone = false;
+  req.on("close", () => {
+    if (res.writableEnded) return;
+    clientGone = true;
+    abort.abort();
+    logger.info({ sessionId }, "Client disconnected, aborting stream");
+  });
+
+  const send = (payload: unknown) => {
+    if (clientGone || res.writableEnded) return;
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  const finish = () => {
+    if (!res.writableEnded) res.end();
+  };
 
   if (useTools) {
     let traceData: Record<string, unknown> | null = null;
@@ -93,22 +115,27 @@ router.post("/", async (req, res) => {
             event = { type: "trace", content: JSON.stringify(parsed) };
           } catch { /* pass through */ }
         }
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
+        send(event);
       },
       async (fullText) => {
+        // Still persist a partial answer when the client vanished mid-stream.
         try {
-          await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceData ?? undefined);
+          if (fullText) {
+            await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceData ?? undefined);
+          }
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
-        res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
-        res.end();
+        send({ type: "done", content: fullText });
+        finish();
       },
       (err) => {
         logger.error({ err }, "ReAct stream error");
-        res.write(`data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`);
-        res.end();
-      }
+        send({ type: "error", content: err.message });
+        finish();
+      },
+      providerKey,
+      abort.signal
     );
   } else {
     const startTime = Date.now();
@@ -118,7 +145,7 @@ router.post("/", async (req, res) => {
       messages,
       maxTokens,
       (chunk) => {
-        res.write(`data: ${JSON.stringify({ type: "chunk", content: chunk })}\n\n`);
+        send({ type: "chunk", content: chunk });
       },
       async (fullText, usage) => {
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -133,20 +160,24 @@ router.post("/", async (req, res) => {
         };
 
         try {
-          await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceObj);
+          if (fullText) {
+            await sessionService.addMessage(sessionId, "assistant", fullText, undefined, traceObj);
+          }
         } catch (err) {
           logger.error({ err }, "Database error saving assistant message");
         }
 
-        res.write(`data: ${JSON.stringify({ type: "trace", content: JSON.stringify(traceObj) })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
-        res.end();
+        send({ type: "trace", content: JSON.stringify(traceObj) });
+        send({ type: "done", content: fullText });
+        finish();
       },
       (err) => {
         logger.error({ err }, "Chat stream error");
-        res.write(`data: ${JSON.stringify({ type: "error", content: err.message })}\n\n`);
-        res.end();
-      }
+        send({ type: "error", content: err.message });
+        finish();
+      },
+      providerKey,
+      abort.signal
     );
   }
 });

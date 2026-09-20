@@ -288,6 +288,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           useOrchestrator,
           maxTokens,
           searchEngine,
+          // Tells the API layer which stored BYOK key to attach.
+          provider: get().selectedProvider,
           googleApiKey: searchEngine === "google" ? googleApiKey : undefined,
           googleCx: searchEngine === "google" ? googleCx : undefined,
           onThinking: (text) => {

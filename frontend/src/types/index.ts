@@ -49,6 +49,8 @@ export interface ProviderModel {
 }
 
 export interface ApiKeyInfo {
+  /** Set when the stored key could not be decrypted (e.g. ENCRYPTION_KEY was rotated). */
+  corrupt?: boolean;
   id: string;
   provider: string;
   label?: string;

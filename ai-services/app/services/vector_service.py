@@ -19,16 +19,35 @@ _client: QdrantClient | None = None
 
 
 def get_client() -> QdrantClient:
+    """Connect to Qdrant, preferring a managed cluster URL when configured.
+
+    The client is only cached once the collection is confirmed to exist.
+    Caching it earlier meant a failure inside _ensure_collection left a
+    half-initialised client behind that every later call happily reused.
+    """
     global _client
-    if _client is None:
-        _client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
-        _ensure_collection()
+    if _client is not None:
+        return _client
+
+    if settings.qdrant_url:
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=30,
+        )
+    else:
+        client = QdrantClient(
+            host=settings.qdrant_host,
+            port=settings.qdrant_port,
+            timeout=30,
+        )
+
+    _ensure_collection(client)
+    _client = client
     return _client
 
 
-def _ensure_collection():
-    client = _client
-    assert client is not None
+def _ensure_collection(client: QdrantClient) -> None:
     collections = [c.name for c in client.get_collections().collections]
     if settings.collection_name not in collections:
         client.create_collection(
@@ -96,8 +115,11 @@ def search_vectors(
 
 
 def check_connection() -> bool:
+    """Health probe. Never raises — a missing vector store degrades the app
+    (no semantic memory or PDF search) but must not take the service down."""
     try:
         get_client().get_collections()
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Qdrant unreachable: %s", exc)
         return False

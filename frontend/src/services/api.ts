@@ -1,17 +1,58 @@
-const BASE = "";
+import { keyHeaderFor } from "./byokStore";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Where the API lives.
+ *
+ * Empty means same-origin, which is correct behind the Docker nginx proxy
+ * and the Vite dev proxy. A split deployment (static frontend on one host,
+ * API on another) sets VITE_API_URL at build time — without it every
+ * request would hit the static host and 404.
+ */
+const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+
+export const apiBaseUrl = BASE;
+
+/** Turn an error response into something worth showing a person. */
+async function toError(res: Response): Promise<Error> {
+  let detail = "";
+  try {
+    const body = await res.text();
+    try {
+      const parsed = JSON.parse(body);
+      detail = typeof parsed.error === "string" ? parsed.error : body;
+    } catch {
+      detail = body;
+    }
+  } catch {
+    /* body already consumed or unreadable */
+  }
+
+  if (res.status === 429) {
+    return new Error(detail || "Too many requests — wait a moment and try again.");
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    return new Error(
+      detail ||
+        "The server is waking up. Free-tier instances sleep when idle — wait ~30s and retry."
+    );
+  }
+  return new Error(detail || `Request failed (${res.status})`);
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  provider?: string
+): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...keyHeaderFor(provider),
       ...init?.headers,
     },
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status}: ${body}`);
-  }
+  if (!res.ok) throw await toError(res);
   if (res.status === 204) return undefined as T;
   return res.json();
 }
@@ -21,7 +62,26 @@ export interface StreamEvent {
   content: string;
 }
 
+export interface ServerConfig {
+  demoMode: boolean;
+  pythonToolEnabled: boolean;
+  maxUploadMb: number;
+}
+
 export const api = {
+  /**
+   * Server capabilities. Fetched at startup so the UI can adapt (BYOK vs
+   * stored keys) without needing a matching build-time flag.
+   */
+  getConfig: () => request<ServerConfig>("/api/config"),
+
+  getProviderModels: (provider: string) =>
+    request<{ models: { id: string; name: string }[]; live: boolean }>(
+      `/api/providers/${encodeURIComponent(provider)}/models`,
+      undefined,
+      provider
+    ),
+
   getSessions: () =>
     request<import("@/types").ChatSession[]>("/api/sessions"),
 
@@ -151,12 +211,11 @@ export const api = {
     if (docId) formData.append("docId", docId);
     const res = await fetch(`${BASE}/api/pdf/upload`, {
       method: "POST",
+      // No Content-Type here: the browser must set the multipart boundary.
+      headers: { ...keyHeaderFor() },
       body: formData,
     });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Upload failed: ${body}`);
-    }
+    if (!res.ok) throw await toError(res);
     return res.json() as Promise<{
       doc_id: string;
       filename: string;
@@ -184,11 +243,17 @@ export const api = {
       onTool?: (text: string) => void;
       onObservation?: (text: string) => void;
       onTrace?: (traceJson: string) => void;
+      provider?: string;
+      signal?: AbortSignal;
     }
   ): void {
     fetch(`${BASE}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      signal: options?.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...keyHeaderFor(options?.provider),
+      },
       body: JSON.stringify({
         sessionId,
         message,
@@ -202,9 +267,7 @@ export const api = {
     })
       .then((res) => {
         if (!res.ok) {
-          return res.text().then((body) => {
-            onError(`Server error ${res.status}: ${body}`);
-          });
+          return toError(res).then((err) => onError(err.message));
         }
 
         const reader = res.body?.getReader();
