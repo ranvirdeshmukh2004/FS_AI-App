@@ -69,6 +69,27 @@ export interface CustomEndpoint {
   updatedAt: string;
 }
 
+export interface OllamaModel {
+  name: string;
+  model: string;
+  size: number;
+  digest: string;
+  modified_at: string;
+  details?: {
+    family?: string;
+    parameter_size?: string;
+    quantization_level?: string;
+  };
+}
+
+export interface OllamaPullProgress {
+  status: string;
+  digest?: string;
+  total?: number;
+  completed?: number;
+  error?: string;
+}
+
 export type Theme = "light" | "dark";
 
 export type View = "chat" | "settings";

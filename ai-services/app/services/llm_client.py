@@ -38,6 +38,40 @@ async def call_llm(base_url: str, api_key: str, model: str,
             "temperature": temperature,
         })
 
+        if resp.status_code == 404 and ":8080" in base_url:
+            base_chat_url = base_url.replace("/v1", "")
+            
+            # For 1B models on custom endpoints, multi-role prompts confuse them.
+            # Extract tool context and user questions into a single clear instruction.
+            doc_context = ""
+            user_question = ""
+            
+            for m in messages:
+                if m["role"] == "assistant" and "tool and got:" in m["content"]:
+                    doc_context = m["content"].split("got:\n")[-1]
+                elif m["role"] == "user" and "Now synthesize" not in m["content"]:
+                    user_question = m["content"]
+            
+            if doc_context and user_question:
+                combined_message = f"Read the following document excerpts:\n\n{doc_context}\n\nBased ONLY on the text above, answer this question: {user_question}"
+            else:
+                # Fallback if no tool context
+                combined_message = messages[-1]["content"] if messages else ""
+
+            custom_resp = await client.post(f"{base_chat_url}/chat", headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }, json={
+                "message": combined_message,
+                "max_tokens": max_tokens
+            })
+            if custom_resp.status_code == 200:
+                data = custom_resp.json()
+                return data.get("response", ""), {
+                    "prompt_tokens": 0,
+                    "completion_tokens": data.get("tokens_used", 0)
+                }
+
         if resp.status_code != 200:
             raise Exception(f"LLM API returned {resp.status_code}: {resp.text}")
 

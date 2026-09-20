@@ -21,6 +21,7 @@ interface AppState {
   error: string | null;
   useTools: boolean;
   useOrchestrator: boolean;
+  maxTokens: number;
   searchEngine: SearchEngine;
   googleApiKey: string;
   googleCx: string;
@@ -34,6 +35,7 @@ interface AppState {
 
   loadSessions: () => void;
   loadSession: (id: string) => void;
+  newChat: () => void;
   createSession: () => Promise<string | null>;
   deleteSession: (id: string) => void;
   updateSessionTitle: (id: string, title: string) => void;
@@ -44,6 +46,7 @@ interface AppState {
 
   setUseTools: (enabled: boolean) => void;
   setUseOrchestrator: (enabled: boolean) => void;
+  setMaxTokens: (tokens: number) => void;
   setSearchEngine: (engine: SearchEngine) => void;
   setGoogleApiKey: (key: string) => void;
   setGoogleCx: (cx: string) => void;
@@ -66,6 +69,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   useTools: true,
   useOrchestrator: localStorage.getItem("useOrchestrator") !== "false",
+  maxTokens: parseInt(localStorage.getItem("maxTokens") || "1024"),
   searchEngine: (localStorage.getItem("searchEngine") as SearchEngine) || "duckduckgo",
   googleApiKey: localStorage.getItem("googleApiKey") || "",
   googleCx: localStorage.getItem("googleCx") || "",
@@ -87,6 +91,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     api.getSessions()
       .then((sessions) => set({ sessions }))
       .catch(() => set({ sessions: [] }));
+  },
+
+  newChat: () => {
+    set({ activeSessionId: null, messages: [], error: null, streamingContent: "", toolActivity: null, pendingTrace: null });
   },
 
   loadSession: (id) => {
@@ -156,18 +164,31 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setProvider: (provider) => {
     const providerData = get().providers.find((p) => p.id === provider);
-    set({
-      selectedProvider: provider,
-      selectedModel: providerData?.models[0]?.id || "",
-    });
+    const newModel = providerData?.models[0]?.id || "";
+    set({ selectedProvider: provider, selectedModel: newModel });
+    const { activeSessionId } = get();
+    if (activeSessionId && newModel) {
+      api.updateSessionModel(activeSessionId, provider, newModel).catch(() => {});
+    }
   },
 
-  setModel: (model) => set({ selectedModel: model }),
+  setModel: (model) => {
+    set({ selectedModel: model });
+    const { activeSessionId, selectedProvider } = get();
+    if (activeSessionId) {
+      api.updateSessionModel(activeSessionId, selectedProvider, model).catch(() => {});
+    }
+  },
 
   setUseTools: (enabled) => set({ useTools: enabled }),
   setUseOrchestrator: (enabled) => {
     localStorage.setItem("useOrchestrator", String(enabled));
     set({ useOrchestrator: enabled });
+  },
+  setMaxTokens: (tokens) => {
+    const clamped = Math.max(128, Math.min(4096, tokens));
+    localStorage.setItem("maxTokens", String(clamped));
+    set({ maxTokens: clamped });
   },
   setSearchEngine: (engine) => {
     localStorage.setItem("searchEngine", engine);
@@ -198,7 +219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: new Date().toISOString(),
       };
 
-      const { useTools, useOrchestrator, searchEngine, googleApiKey, googleCx } = get();
+      const { useTools, useOrchestrator, maxTokens, searchEngine, googleApiKey, googleCx } = get();
 
       set((s) => ({
         messages: [...s.messages, userMessage],
@@ -265,6 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         {
           useTools,
           useOrchestrator,
+          maxTokens,
           searchEngine,
           googleApiKey: searchEngine === "google" ? googleApiKey : undefined,
           googleCx: searchEngine === "google" ? googleCx : undefined,

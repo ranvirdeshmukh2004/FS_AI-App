@@ -3,6 +3,8 @@ import { getDecryptedKey } from "./apiKeyService.js";
 import * as endpointService from "./customEndpointService.js";
 import { logger } from "../utils/logger.js";
 
+const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -22,6 +24,16 @@ async function resolveEndpoint(
   provider: string,
   model: string
 ): Promise<{ baseUrl: string; apiKey: string; model: string; isAnthropic: boolean } | null> {
+  // Ollama — local LLM, no API key needed
+  if (provider === "ollama") {
+    return {
+      baseUrl: `${OLLAMA_BASE}/v1`,
+      apiKey: "ollama",
+      model,
+      isAnthropic: false,
+    };
+  }
+
   // Self-hosted custom endpoint
   if (provider === "self-hosted" && model.startsWith("custom:")) {
     const endpointId = model.slice(7); // remove "custom:" prefix
@@ -54,6 +66,7 @@ export async function streamChat(
   provider: string,
   model: string,
   messages: ChatMessage[],
+  maxTokens: number,
   onChunk: (text: string) => void,
   onDone: (fullText: string, usage: UsageInfo) => void,
   onError: (err: Error) => void
@@ -69,10 +82,10 @@ export async function streamChat(
   }
 
   if (resolved.isAnthropic) {
-    return streamChatAnthropic(resolved.baseUrl, resolved.apiKey, resolved.model, messages, onChunk, onDone, onError);
+    return streamChatAnthropic(resolved.baseUrl, resolved.apiKey, resolved.model, messages, maxTokens, onChunk, onDone, onError);
   }
 
-  return streamChatOpenAI(resolved.baseUrl, resolved.apiKey, resolved.model, messages, onChunk, onDone, onError);
+  return streamChatOpenAI(resolved.baseUrl, resolved.apiKey, resolved.model, messages, maxTokens, onChunk, onDone, onError);
 }
 
 /**
@@ -85,6 +98,7 @@ async function streamChatOpenAI(
   apiKey: string,
   model: string,
   messages: ChatMessage[],
+  maxTokens: number,
   onChunk: (text: string) => void,
   onDone: (fullText: string, usage: UsageInfo) => void,
   onError: (err: Error) => void
@@ -95,17 +109,48 @@ async function streamChatOpenAI(
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify({
         model,
         messages,
         stream: true,
-        max_tokens: 1024,
+        max_tokens: maxTokens,
         stream_options: { include_usage: true },
       }),
     });
+
+    // Fallback for custom EC2 FastAPI servers that expose /chat instead of /v1/chat/completions
+    if (response.status === 404 && baseUrl.includes(":8080")) {
+      const baseChatUrl = baseUrl.replace(/\/v1$/, ""); // Remove /v1 if present
+      
+      // Combine all messages into a single prompt string since the custom API expects "message"
+      const combinedMessage = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+      
+      const customResponse = await fetch(`${baseChatUrl}/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: combinedMessage,
+          max_tokens: maxTokens
+        }),
+      });
+
+      if (customResponse.ok) {
+        const data = await customResponse.json();
+        // Simulate a single streaming chunk with the entire response
+        if (data.response) {
+          onChunk(data.response);
+          onDone(data.response, { 
+            completion_tokens: data.tokens_used || 0,
+            prompt_tokens: 0,
+            total_tokens: data.tokens_used || 0
+          });
+          return;
+        }
+      }
+    }
 
     if (!response.ok) {
       const errBody = await response.text();
@@ -167,6 +212,7 @@ async function streamChatAnthropic(
   apiKey: string,
   model: string,
   messages: ChatMessage[],
+  maxTokens: number,
   onChunk: (text: string) => void,
   onDone: (fullText: string, usage: UsageInfo) => void,
   onError: (err: Error) => void
@@ -181,7 +227,7 @@ async function streamChatAnthropic(
     const body: Record<string, unknown> = {
       model,
       messages: convMessages,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       stream: true,
     };
     if (systemMsg) body.system = systemMsg.content;

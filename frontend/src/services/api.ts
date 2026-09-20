@@ -40,6 +40,12 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
 
+  updateSessionModel: (id: string, provider: string, model: string) =>
+    request<import("@/types").ChatSession>(`/api/sessions/${id}/model`, {
+      method: "PATCH",
+      body: JSON.stringify({ provider, model }),
+    }),
+
   deleteSession: (id: string) =>
     request<void>(`/api/sessions/${id}`, { method: "DELETE" }),
 
@@ -89,6 +95,54 @@ export const api = {
   deleteCustomEndpoint: (id: string) =>
     request<void>(`/api/custom-endpoints/${id}`, { method: "DELETE" }),
 
+  // Ollama local model management
+  getOllamaStatus: () =>
+    request<{ running: boolean }>("/api/ollama/status"),
+
+  getOllamaModels: () =>
+    request<import("@/types").OllamaModel[]>("/api/ollama/models"),
+
+  deleteOllamaModel: (name: string) =>
+    request<void>(`/api/ollama/models/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
+  pullOllamaModel(
+    name: string,
+    onProgress: (p: import("@/types").OllamaPullProgress) => void,
+    onDone: () => void,
+    onError: (err: string) => void
+  ): void {
+    fetch(`${BASE}/api/ollama/pull`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }).then((res) => {
+      if (!res.ok || !res.body) { onError("Pull request failed"); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      function read(): void {
+        reader.read().then(({ done, value }) => {
+          if (done) { onDone(); return; }
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() || "";
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(t.slice(6)) as import("@/types").OllamaPullProgress;
+              if (data.error) { onError(data.error); return; }
+              if (data.status === "success") { onDone(); return; }
+              onProgress(data);
+            } catch { /* skip */ }
+          }
+          read();
+        }).catch((e) => onError(e instanceof Error ? e.message : "Stream failed"));
+      }
+      read();
+    }).catch((e) => onError(e instanceof Error ? e.message : "Network error"));
+  },
+
   // PDF upload
   uploadPdf: async (file: File, sessionId: string, docId?: string) => {
     const formData = new FormData();
@@ -122,6 +176,7 @@ export const api = {
     options?: {
       useTools?: boolean;
       useOrchestrator?: boolean;
+      maxTokens?: number;
       searchEngine?: string;
       googleApiKey?: string;
       googleCx?: string;
@@ -139,6 +194,7 @@ export const api = {
         message,
         useTools: options?.useTools ?? false,
         useOrchestrator: options?.useOrchestrator ?? true,
+        maxTokens: options?.maxTokens ?? 512,
         searchEngine: options?.searchEngine ?? "duckduckgo",
         googleApiKey: options?.googleApiKey || undefined,
         googleCx: options?.googleCx || undefined,

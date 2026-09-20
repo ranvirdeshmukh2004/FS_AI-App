@@ -66,55 +66,93 @@ TOOL_ALIASES = {
 # ---------------------------------------------------------------------------
 ROUTE_PATTERNS = {
     "calculator": [
-        r"\b\d+\s*[\+\-\*\/\^]\s*\d+", r"\bcalculate\b", r"\bcompute\b",
-        r"\bsqrt\b", r"\bfactorial\b", r"\blog\b.*\d", r"\bsin\b|\bcos\b|\btan\b",
-        r"\bwhat is \d+", r"\bhow much is\b",
+        r"\b\d+\s*[\+\-\*\/\^%]\s*\d+",
+        r"\bcalculate\b", r"\bcompute\b", r"\bsolve\b.*\bmath\b",
+        r"\bsqrt\b", r"\bfactorial\b", r"\blog\b.*\d",
+        r"\bsin\b|\bcos\b|\btan\b",
+        r"\bwhat(?:'s| is) \d+", r"\bhow much is\b",
+        r"\b\d+\s*(?:plus|minus|times|divided by|percent\s*of)\s*\d+",
     ],
     "datetime": [
-        r"\bwhat time\b", r"\bwhat date\b", r"\btoday\b.*\bdate\b", r"\bcurrent time\b",
-        r"\btimezone\b", r"\bconvert.*(?:est|pst|ist|utc|gmt|cet|jst)\b",
-        r"\bdays until\b", r"\bdays from now\b", r"\bdays ago\b",
+        r"\bwhat(?:'s| is) (?:the )?(?:time|date|day)\b",
+        r"\bwhat time\b",
+        r"\bwhat(?:'s| is) (?:today|the date|the day)\b",
+        r"\btoday(?:'s)?\b.*\b(?:date|day)\b",
+        r"\bcurrent(?:ly)?\b.*\b(?:time|date)\b",
+        r"\btimezone\b",
+        r"\btime\b.*\bin\b",  # "time in Tokyo", "time in London"
+        r"\bin\b.*\btime\b",  # "current time in X"
+        r"\btime\b.*\b(?:utc|gmt|ist|est|pst|cet|jst|tokyo|london|new york|paris|dubai|sydney)\b",
+        r"\bconvert\b.*\b(?:est|pst|ist|utc|gmt|cet|jst)\b",
+        r"\bdays? (?:until|till|from|since|ago)\b",
+        r"\bwhat day\b", r"\bwhat month\b", r"\bwhat year\b",
+        r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*\bdate\b",
     ],
     "weather": [
-        r"\bweather\b", r"\btemperature\b.*\bin\b", r"\bhow(?:'s| is) (?:the )?weather\b",
-        r"\bforecast\b", r"\braining\b.*\bin\b", r"\bhot\b.*\bin\b.*\btoday\b",
+        r"\bweather\b", r"\btemperature\b", r"\bforecast\b",
+        r"\bhow(?:'s| is) (?:the )?weather\b",
+        r"\bwill it (?:rain|snow)\b", r"\bhumidity\b", r"\bwind speed\b",
+        r"\bclimate\b.*\bin\b",
+        r"\bis it (?:cold|hot|warm|raining|snowing)\b",
     ],
     "web_search": [
-        r"\bsearch\b.*\bfor\b", r"\bgoogle\b", r"\blook up\b", r"\bfind\b.*\bonline\b",
-        r"\blatest\b", r"\brecent\b", r"\bnews\b", r"\bcurrent\b.*\bprice\b",
-        r"\b20(?:2[4-9]|3\d)\b",  # mentions of recent/future years
+        r"\bsearch\b.*\bfor\b", r"\bgoogle\b", r"\blook up\b",
+        r"\bfind\b.*\bonline\b", r"\bsearch online\b",
+        r"\blatest\b", r"\brecent\b", r"\bnews\b",
+        r"\bcurrent\b.*\b(?:price|rate|score|status)\b",
+        r"\bwhat(?:'s| is) happening\b",
+        r"\btoday(?:'s)?\b.*\b(?:news|headlines|updates)\b",
+        r"\b20(?:2[4-9]|3\d)\b",
+        r"\bstock price\b", r"\bcrypto\b", r"\bbitcoin\b", r"\bethereumb\b",
+        r"\bwhat(?:'s| is)\b.*\b(?:price|cost|rate|score|result)\b",
+        r"\b(?:today|now|currently|right now)\b.*\b(?:price|rate|value)\b",
     ],
     "wikipedia": [
-        r"\bwikipedia\b", r"\bwiki\b", r"\bwho (?:is|was)\b", r"\bwhat is\b.*\b(?:the|a)\b",
-        r"\bhistory of\b", r"\btell me about\b",
+        r"\bwikipedia\b", r"\bwiki\b",
+        r"\bwho (?:is|was|were)\b",
+        r"\bwhat is\b", r"\bwhat are\b", r"\bwhat was\b",
+        r"\bwhere is\b", r"\bwhere was\b",
+        r"\bhistory of\b", r"\btell me about\b", r"\bexplain\b",
+        r"\bdescribe\b", r"\bdefine\b", r"\bdefinition of\b",
+        r"\bhow does\b", r"\bhow do\b", r"\bhow did\b",
+        r"\bwhy (?:is|was|did|does|do)\b",
+        r"\bwhen (?:was|did|is)\b",
+        r"\bcapital of\b", r"\bpopulation of\b",
+        r"\bfamous for\b", r"\bknown for\b",
     ],
     "read_url": [
-        r"https?://", r"\bread\b.*\burl\b", r"\bfetch\b.*\bpage\b",
-        r"\bscrape\b", r"\bcontent of\b.*\bwebsite\b",
+        r"https?://",
+        r"\bread\b.*\burl\b", r"\bfetch\b.*\b(?:page|url|link)\b",
+        r"\bopen\b.*\blink\b", r"\bvisit\b.*\b(?:site|page|url)\b",
+        r"\bscrape\b", r"\bcontent of\b.*\b(?:website|page|url)\b",
+        r"\bsummarize\b.*https?://",
     ],
     "python_executor": [
-        r"\brun\b.*\bcode\b", r"\bexecute\b.*\bpython\b", r"\bscript\b",
-        r"\bdata analysis\b", r"\bplot\b", r"\bpandas\b", r"\bnumpy\b",
+        r"\brun\b.*\bcode\b", r"\bexecute\b.*\b(?:python|code|script)\b",
+        r"\bwrite\b.*\b(?:python|script|code)\b.*\band run\b",
+        r"\bdata analysis\b", r"\bpandas\b", r"\bnumpy\b",
+        r"\bgenerate\b.*\bdata\b",
     ],
     "doc_search": [
-        r"\b(?:the|this|uploaded|attached)\b.*\b(?:pdf|document|file|paper)\b",
-        r"\bpage\s*\d+", r"\bsummarize\b.*\b(?:document|pdf|file)\b",
-        r"\baccording to\b", r"\bfrom the\b.*\b(?:document|pdf|paper)\b",
-        r"\bwhat does\b.*\b(?:say|mention|describe)\b",
-        r"\bextract\b.*\bfrom\b", r"\bin the\b.*\b(?:report|paper|doc)\b",
-        r"\bcitation\b", r"\breference\b.*\bpage\b",
-        r"\barchitecture\b", r"\brequirements?\b", r"\bspecification\b",
+        r"\b(?:the|this|uploaded|attached|my)\b.*\b(?:pdf|document|file|paper|report)\b",
+        r"\bpage\s*\d+",
+        r"\bsummarize\b.*\b(?:document|pdf|file|paper)\b",
+        r"\baccording to\b.*\b(?:document|pdf|file)\b",
+        r"\bfrom the\b.*\b(?:document|pdf|paper|report)\b",
+        r"\bextract\b.*\bfrom\b.*\b(?:document|pdf|file)\b",
+        r"\bin the\b.*\b(?:report|paper|doc|pdf)\b",
     ],
 }
 
-# Queries matching these are always DIRECT (no tools)
+# Queries matching these are always DIRECT (no tools needed)
+# Keep this list TIGHT — when in doubt, let the router decide via ROUTE_PATTERNS
 DIRECT_PATTERNS = [
-    r"^(?:hi|hello|hey|thanks|thank you|bye|goodbye)\b",
-    r"\bwrite\b.*\b(?:poem|story|essay|email|code|function|class)\b",
-    r"\bexplain\b.*\b(?:concept|difference|how|what|why)\b",
-    r"\btranslate\b", r"\bsummarize\b",
-    r"\bhelp me\b.*\b(?:write|code|debug|fix)\b",
-    r"\bopinion\b", r"\bthink about\b", r"\badvice\b",
+    r"^(?:hi+|hello+|hey+|thanks?|thank you|bye|goodbye|ok|okay|sure|yes|no|yep|nope|cool|great|awesome)\s*[!?.]*$",
+    r"^(?:hi|hello|hey)\s+(?:there|friend|claude|bot)\s*[!.]*$",
+    r"^(?:what can you do|who are you|what are you|how are you)\b",
+    r"\bwrite\b.*\b(?:poem|story|essay|letter|email)\b",
+    r"\bhelp me\b.*\b(?:write|draft)\b",
+    r"\btranslate\s+.{1,200}\s+(?:to|into|from)\b",
 ]
 
 
@@ -146,13 +184,17 @@ def classify_query(query: str) -> tuple[str, str | None]:
                 break
 
     if len(matched_tools) == 0:
-        # No clear tool match — could be general knowledge or needs tools
-        # Use REACT to let LLM decide (it can answer directly too)
         return QueryRoute.REACT, None
     elif len(matched_tools) == 1:
         return QueryRoute.SINGLE, matched_tools[0]
     else:
-        # Multiple tools likely needed
+        # Multiple tools matched — pick the highest-priority specific one.
+        # Priority: read_url > calculator > datetime > weather > web_search > wikipedia > others
+        priority = ["read_url", "calculator", "datetime", "weather",
+                    "web_search", "python_executor", "doc_search", "wikipedia"]
+        for p in priority:
+            if p in matched_tools:
+                return QueryRoute.SINGLE, p
         return QueryRoute.REACT, None
 
 
@@ -243,6 +285,20 @@ def _has_action(text: str) -> bool:
     return bool(re.search(r"Action:\s*\w+", text, re.IGNORECASE))
 
 
+def _clean_response(text: str) -> str:
+    """Strip ReAct format artifacts so the user only sees the answer."""
+    # If there's a Final Answer, return only that
+    fa = re.search(r"Final Answer:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
+    if fa:
+        return fa.group(1).strip()
+    # Otherwise strip any remaining format prefixes
+    text = re.sub(r"^Thought:\s*.*?\n", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\nThought:\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"Action:\s*\w+\s*\nAction Input:\s*.+", "", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"Observation:\s*.+", "", text, flags=re.IGNORECASE | re.DOTALL)
+    return text.strip()
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator entry point
 # ---------------------------------------------------------------------------
@@ -255,6 +311,7 @@ async def run_orchestrator_stream(
     search_engine: str = "duckduckgo",
     google_api_key: str | None = None,
     google_cx: str | None = None,
+    max_tokens: int = 512,
 ) -> AsyncGenerator[dict, None]:
     """
     Orchestrator entry point. Classifies the query, then routes to:
@@ -287,7 +344,7 @@ async def run_orchestrator_stream(
     # --- DIRECT: No tools needed ---
     if route == QueryRoute.DIRECT:
         step_start = time.time()
-        response, usage = await call_llm(base_url, api_key, model, conversation_messages)
+        response, usage = await call_llm(base_url, api_key, model, conversation_messages, max_tokens=max_tokens)
         dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -324,30 +381,31 @@ async def run_orchestrator_stream(
         ]
 
         step_start = time.time()
-        response, usage = await call_llm(base_url, api_key, model, synth_messages)
+        response, usage = await call_llm(base_url, api_key, model, synth_messages, max_tokens=max_tokens)
         dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
 
         trace_steps.append({"type": "thought", "content": "Synthesized tool results into answer", "duration": dur})
         td = round(time.time() - start_time, 2)
-        yield {"type": "chunk", "content": response}
+        clean = _clean_response(response)
+        yield {"type": "chunk", "content": clean}
         yield {"type": "trace", "content": build_trace_json(trace_steps, 1, td, total_in, total_out)}
-        yield {"type": "done", "content": response}
+        yield {"type": "done", "content": clean}
         return
 
     # --- REACT: Full multi-step reasoning ---
-    # Determine which domain(s) the query touches for focused prompts
     tool_list = _build_tool_descriptions(TOOL_REGISTRY)
     extra = f"\nNote: Web search uses {search_engine}."
     system_prompt = REACT_SYSTEM.format(tool_list=tool_list, extra_context=extra)
 
     messages = [{"role": "system", "content": system_prompt}, *conversation_messages]
     tool_call_count = 0
+    react_max_tokens = max(max_tokens, 1024)  # ReAct needs room to output Thought+Action
 
     for step in range(MAX_REACT_STEPS):
         step_start = time.time()
-        full_response, usage = await call_llm(base_url, api_key, model, messages)
+        full_response, usage = await call_llm(base_url, api_key, model, messages, max_tokens=react_max_tokens)
         llm_dur = round(time.time() - step_start, 2)
         total_in += usage.get("prompt_tokens", 0)
         total_out += usage.get("completion_tokens", 0)
@@ -359,28 +417,69 @@ async def run_orchestrator_stream(
             if tm:
                 trace_steps.append({"type": "thought", "content": tm.group(1).strip(), "duration": llm_dur})
             td = round(time.time() - start_time, 2)
-            yield {"type": "chunk", "content": final}
+            clean = _clean_response(final)
+            yield {"type": "chunk", "content": clean}
             yield {"type": "trace", "content": build_trace_json(trace_steps, tool_call_count, td, total_in, total_out)}
-            yield {"type": "done", "content": final}
+            yield {"type": "done", "content": clean}
             return
 
-        # Direct answer (no tools)
+        # Model didn't use tools — on first step, try to infer a tool from the query anyway
+        if not _has_action(full_response) and step == 0:
+            inferred_route, inferred_tool = classify_query(user_msg)
+            if inferred_tool and inferred_route == QueryRoute.SINGLE:
+                logger.info("Model skipped tools on step 0; auto-executing inferred tool: %s", inferred_tool)
+                yield {"type": "tool", "content": f"Using {inferred_tool}"}
+                trace_steps.append({"type": "action", "tool": inferred_tool, "input": user_msg})
+
+                tool_start = time.time()
+                try:
+                    observation = await execute_tool(inferred_tool, user_msg, search_engine, google_api_key, google_cx)
+                except Exception as e:
+                    observation = f"Tool error: {str(e)}"
+                tool_dur = round(time.time() - tool_start, 2)
+
+                obs_summary = observation[:300] + "..." if len(observation) > 300 else observation
+                trace_steps.append({"type": "observation", "tool": inferred_tool, "content": obs_summary, "duration": tool_dur})
+                yield {"type": "observation", "content": f"{inferred_tool} returned results ({tool_dur}s)"}
+
+                synth_messages = [
+                    {"role": "system", "content": SINGLE_TOOL_SYSTEM},
+                    *conversation_messages,
+                    {"role": "assistant", "content": f"I used the {inferred_tool} tool and got:\n{observation}"},
+                    {"role": "user", "content": "Now synthesize this into a clear, helpful answer for the user."},
+                ]
+                step_start2 = time.time()
+                response2, usage2 = await call_llm(base_url, api_key, model, synth_messages, max_tokens=max_tokens)
+                dur2 = round(time.time() - step_start2, 2)
+                total_in += usage2.get("prompt_tokens", 0)
+                total_out += usage2.get("completion_tokens", 0)
+                trace_steps.append({"type": "thought", "content": "Synthesized tool results", "duration": dur2})
+                td = round(time.time() - start_time, 2)
+                clean2 = _clean_response(response2)
+                yield {"type": "chunk", "content": clean2}
+                yield {"type": "trace", "content": build_trace_json(trace_steps, 1, td, total_in, total_out)}
+                yield {"type": "done", "content": clean2}
+                return
+
+        # Direct answer (no tools used by model, no fallback available)
         if not _has_action(full_response):
             td = round(time.time() - start_time, 2)
-            yield {"type": "chunk", "content": full_response}
+            clean = _clean_response(full_response)
+            yield {"type": "chunk", "content": clean}
             yield {"type": "trace", "content": build_trace_json(
                 trace_steps or [{"type": "direct", "content": "Answered directly", "duration": llm_dur}],
                 0, td, total_in, total_out)}
-            yield {"type": "done", "content": full_response}
+            yield {"type": "done", "content": clean}
             return
 
         # Parse and execute tool
         action, action_input = _parse_action(full_response)
         if not action or not action_input:
             td = round(time.time() - start_time, 2)
-            yield {"type": "chunk", "content": full_response}
+            clean = _clean_response(full_response)
+            yield {"type": "chunk", "content": clean}
             yield {"type": "trace", "content": build_trace_json(trace_steps, tool_call_count, td, total_in, total_out)}
-            yield {"type": "done", "content": full_response}
+            yield {"type": "done", "content": clean}
             return
 
         # Emit thinking
@@ -409,10 +508,10 @@ async def run_orchestrator_stream(
 
     # Exhausted steps
     messages.append({"role": "user", "content": "Provide your Final Answer now."})
-    final_response, usage = await call_llm(base_url, api_key, model, messages)
+    final_response, usage = await call_llm(base_url, api_key, model, messages, max_tokens=max_tokens)
     total_in += usage.get("prompt_tokens", 0)
     total_out += usage.get("completion_tokens", 0)
-    final = _parse_final_answer(final_response) or final_response
+    final = _clean_response(_parse_final_answer(final_response) or final_response)
 
     td = round(time.time() - start_time, 2)
     yield {"type": "chunk", "content": final}
