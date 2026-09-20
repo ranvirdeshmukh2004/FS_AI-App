@@ -1,9 +1,26 @@
 import { Router } from "express";
 import { z } from "zod";
 import * as endpointService from "../services/customEndpointService.js";
+import { checkOutboundUrl } from "../utils/urlGuard.js";
 import { logger } from "../utils/logger.js";
 
 const router = Router();
+
+function maskKey(key: string): string {
+  if (key.length <= 12) return "****";
+  return key.slice(0, 4) + "..." + key.slice(-4);
+}
+
+/**
+ * These routes fetch a URL the caller supplies, so without a check they are
+ * an SSRF proxy into whatever network this container can see.
+ */
+function rejectBlockedUrl(url: string, res: import("express").Response): boolean {
+  const guard = checkOutboundUrl(url);
+  if (guard.ok) return false;
+  res.status(400).json({ valid: false, error: guard.reason, message: guard.reason });
+  return true;
+}
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -30,7 +47,7 @@ router.get("/", async (_req, res) => {
     res.json(
       endpoints.map((e) => ({
         ...e,
-        apiKey: e.apiKey ? e.apiKey.slice(0, 4) + "..." + e.apiKey.slice(-4) : null,
+        apiKey: e.apiKey ? maskKey(e.apiKey) : null,
       }))
     );
   } catch (err) {
@@ -46,6 +63,8 @@ router.post("/", async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  if (rejectBlockedUrl(parsed.data.baseUrl, res)) return;
+
   try {
     const endpoint = await endpointService.createEndpoint(parsed.data);
     res.status(201).json(endpoint);
@@ -62,6 +81,8 @@ router.post("/test", async (req, res) => {
     res.status(400).json({ valid: false, message: "Missing baseUrl" });
     return;
   }
+
+  if (typeof baseUrl !== "string" || rejectBlockedUrl(baseUrl, res)) return;
 
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -84,10 +105,9 @@ router.post("/test", async (req, res) => {
         models,
       });
     } else {
-      const body = await response.text();
       res.json({
         valid: false,
-        message: `Server returned ${response.status}: ${body.slice(0, 200)}`,
+        message: `Server returned ${response.status}. Check the URL and API key.`,
       });
     }
   } catch (err) {
@@ -103,6 +123,8 @@ router.patch("/:id", async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  if (parsed.data.baseUrl && rejectBlockedUrl(parsed.data.baseUrl, res)) return;
+
   try {
     const endpoint = await endpointService.updateEndpoint(req.params.id, parsed.data);
     res.json(endpoint);

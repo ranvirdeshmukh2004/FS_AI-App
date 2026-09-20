@@ -1,4 +1,5 @@
 import { resolveEndpoint } from "./chatService.js";
+import { config } from "../config/index.js";
 import { logger } from "../utils/logger.js";
 
 // Default to localhost — Docker deployments override via AI_SERVICES_URL env var
@@ -22,14 +23,18 @@ export async function streamReactChat(
   maxTokens: number,
   onEvent: (event: { type: string; content: string }) => void,
   onDone: (fullText: string) => void,
-  onError: (err: Error) => void
+  onError: (err: Error) => void,
+  suppliedKey?: string | null,
+  signal?: AbortSignal
 ) {
-  const resolved = await resolveEndpoint(provider, model);
+  const resolved = await resolveEndpoint(provider, model, suppliedKey);
   if (!resolved) {
     onError(new Error(
       provider === "self-hosted"
-        ? "Self-hosted endpoint not found or inactive"
-        : `No API key configured for ${provider}`
+        ? "Self-hosted endpoint not found, inactive, or pointing at a blocked address"
+        : config.demoMode
+          ? `No API key supplied for ${provider}. Add your own key in Settings — it stays in your browser.`
+          : `No API key configured for ${provider}`
     ));
     return;
   }
@@ -37,15 +42,16 @@ export async function streamReactChat(
   // Verify ai-services is up before streaming (10s timeout — Node fetch on Windows is slow to connect)
   try {
     const healthRes = await fetch(`${AI_SERVICES_URL}/api/health`, {
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
     if (!healthRes.ok) throw new Error(`Health check returned ${healthRes.status}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ url: AI_SERVICES_URL, err: msg }, "ai-services unreachable");
     onError(new Error(
-      `Tool services (ai-services) are not reachable at ${AI_SERVICES_URL}. ` +
-      `Start them with: cd ai-services && .\\start-local.bat\n\nOriginal error: ${msg}`
+      config.nodeEnv === "production"
+        ? "The tool service is waking up (free-tier instances sleep when idle). Wait ~30s and send your message again, or turn tools off to answer directly."
+        : `Tool services (ai-services) are not reachable at ${AI_SERVICES_URL}. Start them with: cd ai-services && uvicorn app.main:app --port 8001\n\nOriginal error: ${msg}`
     ));
     return;
   }
@@ -54,6 +60,7 @@ export async function streamReactChat(
     const response = await fetch(`${AI_SERVICES_URL}/api/react/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal,
       body: JSON.stringify({
         provider_base_url: resolved.baseUrl,
         api_key: resolved.apiKey,
@@ -73,7 +80,7 @@ export async function streamReactChat(
     if (!response.ok) {
       const errBody = await response.text();
       logger.error({ status: response.status, body: errBody }, "ReAct API error");
-      onError(new Error(`ReAct service returned ${response.status}: ${errBody}`));
+      onError(new Error(`The tool service returned ${response.status}. Try again, or turn tools off to answer directly.`));
       return;
     }
 
@@ -107,6 +114,10 @@ export async function streamReactChat(
     };
 
     while (true) {
+      if (signal?.aborted) {
+        await reader.cancel().catch(() => {});
+        return;
+      }
       const { done, value } = await reader.read();
       if (done) {
         // Flush remaining buffer when stream closes
@@ -127,6 +138,7 @@ export async function streamReactChat(
 
     onDone(fullText);
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
